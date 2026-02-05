@@ -8,13 +8,15 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserRequestDTO {
+public class RegisterRequestDTO {
 
+    // Personal Information
     @NotBlank(message = "First name is required")
     @Size(min = 2, max = 50, message = "First name must be between 2 and 50 characters")
     private String firstName;
@@ -40,6 +42,7 @@ public class UserRequestDTO {
     @NotNull(message = "Marital status is required")
     private MaritalStatus maritalStatus;
 
+    // Professional Information
     @NotBlank(message = "Email is required")
     @Email(message = "Email must be valid")
     private String email;
@@ -75,14 +78,33 @@ public class UserRequestDTO {
     @Max(value = 5, message = "Evaluation score must be at most 5")
     private Integer evaluationScore;
 
-    private Boolean active;
+    private Boolean active = true;
 
     @Pattern(regexp = "^[0-9]{10}$", message = "Social security number must contain 10 digits")
     private String socialSecurityNumber;
 
+    // Relations
     private Long assignedProjectManagerId;
     private Long directManagerId;
 
     @Min(value = 0, message = "Number of children cannot be negative")
     private Integer childrenCount;
+
+    // Registration-specific fields
+    private List<Long> roleIds; // Role IDs to assign
+
+    // Additional validations
+    public void validate() {
+        if (hireDate != null && hireDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("Hire date cannot be in the future");
+        }
+
+        if (birthDate != null && !birthDate.isBefore(LocalDate.now().minusYears(16))) {
+            throw new IllegalArgumentException("Employee must be at least 16 years old");
+        }
+
+        if (contractEndDate != null && hireDate != null && contractEndDate.isBefore(hireDate)) {
+            throw new IllegalArgumentException("Contract end date cannot be before hire date");
+        }
+    }
 }

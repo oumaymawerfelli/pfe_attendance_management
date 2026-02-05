@@ -1,9 +1,9 @@
 // File: src/main/java/com/example/pfe/controller/UserController.java
 package com.example.pfe.Controller;
 
+import com.example.pfe.Service.UserService;
 import com.example.pfe.dto.UserRequestDTO;
 import com.example.pfe.dto.UserResponseDTO;
-import com.example.pfe.Service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

@@ -6,11 +6,16 @@ import com.example.pfe.enums.Gender;
 import com.example.pfe.enums.MaritalStatus;
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "users")
@@ -64,10 +69,10 @@ public class User {
    private Integer evaluationScore;// Latest performance rating (e.g., 1-5 scale)
 
 
-   private String passwordHash;
+
    private Integer createdBy; //ID of user who created this account (for audit)
 
-   private Boolean active;
+   //private Boolean active;
 
    private String socialSecurityNumber;// N° de sécurité sociale/CSS number
 
@@ -109,4 +114,40 @@ public class User {
    @Builder.Default
    private List<TeamAssignment> createdAssignments = new ArrayList<>();
 
+   // CES CHAMPS POUR L'AUTHENTIFICATION
+   @Column(unique = true)
+   private String username; // EmployeeCode par défaut, modifiable par l'utilisateur
+
+   @Column(nullable = false)
+   private String passwordHash;
+
+
+   @Builder.Default
+   private boolean enabled = false; // false jusqu'à activation
+
+   @Builder.Default
+   private boolean accountNonExpired = true;
+
+   @Builder.Default
+   private boolean credentialsNonExpired = true;
+
+   @Builder.Default
+   private boolean accountNonLocked = true;
+
+   @Builder.Default
+   private boolean firstLogin = true; // Pour forcer le changement de mot de passe
+
+   @Builder.Default
+   private Boolean active = true;
+
+   @Column(columnDefinition = "TEXT")  // TEXT has unlimited length
+   private String activationToken;
+   private LocalDateTime activationTokenExpiry;
+
+   // Méthode pour Spring Security
+   public Collection<? extends GrantedAuthority> getAuthorities() {
+      return roles.stream()
+              .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name()))
+              .collect(Collectors.toList());
+   }
 }
