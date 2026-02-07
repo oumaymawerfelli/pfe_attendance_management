@@ -1,6 +1,7 @@
 package com.example.pfe.dto;
 
 import com.example.pfe.enums.*;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
@@ -75,6 +77,8 @@ public class UserRequestDTO {
     @Max(value = 5, message = "Evaluation score must be at most 5")
     private Integer evaluationScore;
 
+
+
     private Boolean active;
 
     @Pattern(regexp = "^[0-9]{10}$", message = "Social security number must contain 10 digits")
@@ -82,6 +86,10 @@ public class UserRequestDTO {
 
     private Long assignedProjectManagerId;
     private Long directManagerId;
+
+
+    private List<String> roleNames;
+
 
     @Min(value = 0, message = "Number of children cannot be negative")
     private Integer childrenCount;

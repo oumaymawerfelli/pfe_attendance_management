@@ -86,9 +86,11 @@ public class User {
    private User directManager;
 
 
-   @ManyToMany// Many-to-Many with Role - User can have multiple roles, roles can have multiple users
+
+   // Many-to-Many with Role - User can have multiple roles, roles can have multiple users
+   @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.EAGER)
    @JoinTable(
-           name = "user_roles",  // Join table name
+           name = "user_roles",
            joinColumns = @JoinColumn(name = "user_id"),
            inverseJoinColumns = @JoinColumn(name = "role_id")
    )
@@ -138,7 +140,7 @@ public class User {
    private boolean firstLogin = true; // Pour forcer le changement de mot de passe
 
    @Builder.Default
-   private Boolean active = true;
+   public Boolean active = true;
 
    @Column(columnDefinition = "TEXT")  // TEXT has unlimited length
    private String activationToken;

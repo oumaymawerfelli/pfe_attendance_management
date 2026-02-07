@@ -13,81 +13,138 @@ import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 
-@Component
+//@Component
 @RequiredArgsConstructor
 @Slf4j
 public class DataInitializer {
 
-    private final UserRepository userRepository;
+   /* private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
 
     @PostConstruct
     public void init() {
-        // Create default roles if they don't exist
-        createDefaultRoles();
+        try {
+            System.out.println("🔥🔥🔥 DataInitializer.init() STARTING 🔥🔥🔥");
 
-        // Create admin user if not exists
-        if (!userRepository.existsByEmail("admin@company.com")) {
-            createAdminUser();
-        }
+            // Create default roles if they don't exist
+            createDefaultRoles();
 
-        // Create test user for Swagger
-        if (!userRepository.existsByEmail("test@company.com")) {
-            createTestUser();
+            // Create admin user if not exists
+            if (!userRepository.existsByEmail("admin@company.com")) {
+                createAdminUser();
+            }
+
+            // Create test user for Swagger
+            if (!userRepository.existsByEmail("test@company.com")) {
+                createTestUser();
+            }
+
+            System.out.println("🔥🔥🔥 DataInitializer.init() COMPLETED SUCCESSFULLY 🔥🔥🔥");
+        } catch (Exception e) {
+            System.err.println("🔥🔥🔥 CRITICAL ERROR in DataInitializer: " + e.getMessage());
+            e.printStackTrace();
+            throw e; // Re-throw to see full stack trace
         }
     }
 
     private void createDefaultRoles() {
+        System.out.println("🔥 Creating default roles...");
+
         for (RoleName roleName : RoleName.values()) {
-            if (!roleRepository.existsByName(roleName)) {
-                Role role = new Role();
-                role.setName(roleName);
-                roleRepository.save(role);
-                log.info("Created role: {}", roleName);
+            try {
+                System.out.println("🔥 Checking role: " + roleName);
+                boolean exists = roleRepository.existsByName(roleName);
+                System.out.println("🔥 Role " + roleName + " exists? " + exists);
+
+                if (!exists) {
+                    Role role = new Role();
+                    role.setName(roleName);
+
+                    // Set description based on role
+                    switch (roleName) {
+                        case EMPLOYEE -> role.setDescription("Default employee role");
+                        case PROJECT_MANAGER -> role.setDescription("Manages projects");
+                        case ADMIN -> role.setDescription("Administrator with full access");
+                        case GENERAL_MANAGER -> role.setDescription("General manager with all privileges");
+                        default -> role.setDescription("System role");
+                    }
+
+                    roleRepository.save(role);
+                    System.out.println("✅ Created role: " + roleName);
+                }
+            } catch (Exception e) {
+                System.err.println("🔥 ERROR creating role " + roleName + ": " + e.getMessage());
+                e.printStackTrace();
             }
         }
     }
 
     private void createAdminUser() {
-        User admin = new User();
-        admin.setFirstName("Admin");
-        admin.setLastName("System");
-        admin.setEmail("admin@company.com");
-        admin.setUsername("admin");
-        admin.setEmployeeCode("ADM001");
-        admin.setPasswordHash(passwordEncoder.encode("Admin@123"));
-        admin.setEnabled(true);
-        admin.setFirstLogin(false);
-        admin.setActive(true);
+        try {
+            System.out.println("🔥 Creating admin user...");
 
-        // Assign ADMIN role
-        Role adminRole = roleRepository.findByName(RoleName.ADMIN)
-                .orElseThrow(() -> new RuntimeException("ADMIN role not found"));
-        admin.setRoles(Collections.singletonList(adminRole));
+            // First, make sure ADMIN role exists
+            Role adminRole = roleRepository.findByName(RoleName.ADMIN)
+                    .orElseGet(() -> {
+                        System.out.println("⚠ ADMIN role not found, creating it...");
+                        Role role = new Role();
+                        role.setName(RoleName.ADMIN);
+                        role.setDescription("Administrator with full access");
+                        return roleRepository.save(role);
+                    });
 
-        userRepository.save(admin);
-        log.info("Created admin user: admin / Admin@123");
+            User admin = new User();
+            admin.setFirstName("Admin");
+            admin.setLastName("System");
+            admin.setEmail("admin@company.com");
+            admin.setUsername("admin");
+            admin.setEmployeeCode("ADM001");
+            admin.setPasswordHash(passwordEncoder.encode("Admin@123"));
+            admin.setEnabled(true);
+            admin.setFirstLogin(false);
+            admin.setActive(true);
+            admin.setRoles(Collections.singletonList(adminRole));
+
+            userRepository.save(admin);
+            System.out.println("✅ Created admin user: admin / Admin@123");
+        } catch (Exception e) {
+            System.err.println("🔥 ERROR creating admin user: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private void createTestUser() {
-        User testUser = new User();
-        testUser.setFirstName("Test");
-        testUser.setLastName("User");
-        testUser.setEmail("test@company.com");
-        testUser.setUsername("test");
-        testUser.setEmployeeCode("TEST001");
-        testUser.setPasswordHash(passwordEncoder.encode("Test@123"));
-        testUser.setEnabled(true);
-        testUser.setFirstLogin(false);
-        testUser.setActive(true);
+        try {
+            System.out.println("🔥 Creating test user...");
 
-        // Assign EMPLOYEE role
-        Role employeeRole = roleRepository.findByName(RoleName.EmPLOYEE)
-                .orElseThrow(() -> new RuntimeException("EMPLOYEE role not found"));
-        testUser.setRoles(Collections.singletonList(employeeRole));
+            // First, make sure EMPLOYEE role exists
+            Role employeeRole = roleRepository.findByName(RoleName.EMPLOYEE)
+                    .orElseGet(() -> {
+                        System.out.println("⚠ EMPLOYEE role not found, creating it...");
+                        Role role = new Role();
+                        role.setName(RoleName.EMPLOYEE);
+                        role.setDescription("Default employee role");
+                        return roleRepository.save(role);
+                    });
 
-        userRepository.save(testUser);
-        log.info("Created test user: test / Test@123");
-    }
+            User testUser = new User();
+            testUser.setFirstName("Test");
+            testUser.setLastName("User");
+            testUser.setEmail("test@company.com");
+            testUser.setUsername("test");
+            testUser.setEmployeeCode("TEST001");
+            testUser.setPasswordHash(passwordEncoder.encode("Test@123"));
+            testUser.setEnabled(true);
+            testUser.setFirstLogin(false);
+            testUser.setActive(true);
+            testUser.setRoles(Collections.singletonList(employeeRole));
+
+            userRepository.save(testUser);
+            System.out.println("✅ Created test user: test / Test@123");
+        } catch (Exception e) {
+            System.err.println("🔥 ERROR creating test user: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }*/
 }

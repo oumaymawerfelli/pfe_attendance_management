@@ -11,19 +11,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class JwtResponseDTO {
     private String token;
-    private String type = "Bearer";
+    @Builder.Default
+    private String tokenType = "Bearer";
+    private Long expiresIn;
     private String message;
-    private UserResponseDTO user; // Optionnel: retourner les infos utilisateur
-
-    // Constructeurs pratiques
-    public JwtResponseDTO(String token) {
-        this.token = token;
-        this.type = "Bearer";
-    }
-
-    public JwtResponseDTO(String token, String message) {
-        this.token = token;
-        this.type = "Bearer";
-        this.message = message;
-    }
+    private UserResponseDTO user;
 }

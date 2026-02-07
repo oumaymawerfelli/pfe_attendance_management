@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -92,7 +93,8 @@ public class RegisterRequestDTO {
 
     // Registration-specific fields
     private List<Long> roleIds; // Role IDs to assign
-
+    @Builder.Default
+    private List<String> roleNames = new ArrayList<>();
     // Additional validations
     public void validate() {
         if (hireDate != null && hireDate.isAfter(LocalDate.now())) {

@@ -1,5 +1,6 @@
 package com.example.pfe.Service;
 
+import com.example.pfe.enums.ProjectStatus;
 import com.example.pfe.exception.BusinessException;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -13,63 +14,22 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailService {
 
+
     private final JavaMailSender mailSender;
     private final TemplateEngine templateEngine;
-
-   // @Value("${app.frontend.url:http://localhost:3000}")
-   // private String frontendUrl;
 
     @Value("${spring.mail.username}")
     private String fromEmail;
 
-    @Async
-    public void sendWelcomeEmail(String toEmail, String fullName,
-                                 String employeeCode,
-                                 String defaultPassword,
-                                 String activationToken) {
+    // ========== CORRECTION DES MÉTHODES D'ACTIVATION ==========
 
-        try {/*
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject("Welcome to Our Company - Your Account Credentials");
-
-            // Activation link
-            String activationLink = frontendUrl + "/activate-account?token=" + activationToken;
-
-            // Prepare data for the template
-            Context context = new Context();
-            context.setVariable("fullName", fullName); //  ADD FULL NAME
-            context.setVariable("employeeCode", employeeCode);
-            context.setVariable("defaultPassword", defaultPassword);
-            context.setVariable("activationLink", activationLink);
-            context.setVariable("companyName", "Your Company Name");
-
-            // Load the HTML template
-            String htmlContent = templateEngine.process("welcome-email", context);
-
-            helper.setText(htmlContent, true);
-
-            mailSender.send(message);
-
-            log.info("Welcome email sent to: {}", toEmail);
-*/
-            sendWelcomeEmailDev(toEmail, fullName, employeeCode, defaultPassword, activationToken);
-      /*  } catch (MessagingException e) {
-            log.error("Error sending email to {}: {}", toEmail, e.getMessage());
-            throw new RuntimeException("Failed to send email", e);
-        }*/
-        } catch (Exception e) {
-            log.warn("Skipping real email sending (DEV mode): {}", e.getMessage());
-        }
-    }
 
     @Async
     public void sendPasswordResetEmail(String toEmail, String fullName,
@@ -99,7 +59,82 @@ public class EmailService {
         }
     }
 
-    //  SIMPLIFIED METHOD FOR DEVELOPMENT
+    // ========== MÉTHODES POUR LES PROJETS ==========
+
+    @Async
+    public void sendProjectAssignmentEmail(String toEmail, String fullName,
+                                           String projectName, String projectDescription,
+                                           String assignmentNotes) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("📋 You've been assigned to manage: " + projectName);
+
+            Context context = new Context();
+            context.setVariable("fullName", fullName);
+            context.setVariable("projectName", projectName);
+            context.setVariable("projectDescription", projectDescription);
+            context.setVariable("assignmentNotes", assignmentNotes);
+            context.setVariable("assignmentDate", LocalDateTime.now());
+
+            String htmlContent = templateEngine.process("project-assignment-email", context);
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("Project assignment email sent to: {}", toEmail);
+
+        } catch (MessagingException e) {
+            log.error("Error sending project assignment email: {}", e.getMessage());
+            throw new RuntimeException("Failed to send project assignment email", e);
+        }
+    }
+
+    @Async
+    public void sendProjectUnassignmentEmail(String toEmail, String recipientName,
+                                             String projectName) {
+        log.info("Sending unassignment email to {} for project {}", toEmail, projectName);
+        log.info("Email sent: Project '{}' unassigned from {}", projectName, recipientName);
+
+        // Optionnel: Implémentez l'envoi d'email réel ici
+    }
+
+    @Async
+    public void sendProjectStatusUpdateEmail(String toEmail, String firstName,
+                                             String projectName, ProjectStatus status) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("📊 Project Status Updated: " + projectName);
+
+            Context context = new Context();
+            context.setVariable("firstName", firstName);
+            context.setVariable("projectName", projectName);
+            context.setVariable("newStatus", status);
+            context.setVariable("updateDate", LocalDateTime.now());
+
+            String htmlContent = templateEngine.process("project-status-update-email", context);
+            helper.setText(htmlContent, true);
+
+            mailSender.send(message);
+            log.info("Project status update email sent to: {}", toEmail);
+
+        } catch (MessagingException e) {
+            log.error("Error sending project status update email: {}", e.getMessage());
+            throw new RuntimeException("Failed to send project status update email", e);
+        }
+    }
+
+    // ========== MÉTHODES DE DÉVELOPPEMENT ==========
+
+    /**
+     * Méthode de simulation pour le développement
+     */
     public void sendWelcomeEmailDev(String toEmail, String fullName,
                                     String employeeCode, String defaultPassword,
                                     String activationToken) {
@@ -109,42 +144,65 @@ public class EmailService {
         log.info("Employee Code: {}", employeeCode);
         log.info("Temporary Password: {}", defaultPassword);
         log.info("Activation Token: {}", activationToken);
-       // log.info("Activation Link: {}/activate-account?token={}", frontendUrl, activationToken);
         log.info("==============================");
     }
-//Reset password for user who lost their temporary password
-//     * Only admin can do this
-    public void sendActivationReminderEmail(String to, String fullName, String activationToken) {
+
+    /**
+     * Méthode utilitaire pour tester l'envoi d'email
+     */
+    @Async
+    public void sendTestEmail(String toEmail, String subject, String message) {
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
 
-            helper.setTo(to);
-            helper.setSubject("Reminder: Activate Your Account");
             helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(message, false);
 
-            String activationLink =  "/activate?token=" + activationToken;
-
-            String htmlContent = String.format("""
-            <html>
-            <body>
-                <h2>Account Activation Reminder</h2>
-                <p>Hi %s,</p>
-                <p>This is a reminder to activate your account.</p>
-                <p>If you lost your temporary password, please contact your administrator 
-                   to reset it.</p>
-                <p>Click the link below to activate your account:</p>
-                <p><a href="%s">Activate Account</a></p>
-                <p>This link will expire soon.</p>
-            </body>
-            </html>
-            """, fullName, activationLink);
-
-            helper.setText(htmlContent, true);
-            mailSender.send(message);
+            mailSender.send(mimeMessage);
+            log.info("Test email sent to: {}", toEmail);
 
         } catch (MessagingException e) {
-            throw new BusinessException("Failed to send activation reminder email");
+            log.error("Failed to send test email: {}", e.getMessage());
         }
     }
+
+
+
+    @Async
+    public void sendWelcomeEmail(String toEmail, String fullName,
+                                 String employeeCode,
+                                 String defaultPassword,
+                                 String activationToken) {
+        try {
+            log.info("=== SIMULATED EMAIL - WELCOME ===");
+            log.info("To: {}", toEmail);
+            log.info("Full Name: {}", fullName);
+            log.info("Employee Code: {}", employeeCode);
+            log.info("Temporary Password: {}", defaultPassword);
+            log.info("Activation Token: {}", activationToken);
+            log.info("=================================");
+        } catch (Exception e) {
+            log.warn("Skipping real email sending: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Email de rappel d'activation
+     * - 2 paramètres seulement
+     */
+    @Async
+    public void sendActivationReminderEmail(String toEmail, String activationToken) {
+        try {
+            log.info("=== SIMULATED EMAIL - ACTIVATION REMINDER ===");
+            log.info("To: {}", toEmail);
+            log.info("Activation Token: {}", activationToken);
+            log.info("============================================");
+        } catch (Exception e) {
+            log.error("Failed to send activation reminder email: {}", e.getMessage());
+        }
+    }
+
 }

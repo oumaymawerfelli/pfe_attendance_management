@@ -4,5 +4,5 @@ public enum RoleName {
     ADMIN,
     GENERAL_MANAGER,
     PROJECT_MANAGER,
-    EmPLOYEE
+    EMPLOYEE
 }

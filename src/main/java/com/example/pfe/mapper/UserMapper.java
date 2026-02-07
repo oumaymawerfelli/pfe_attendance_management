@@ -10,7 +10,6 @@ public class UserMapper {
 
     public User toEntity(UserRequestDTO dto) {
         return User.builder()
-
                 .firstName(dto.getFirstName())
                 .lastName(dto.getLastName())
                 .birthDate(dto.getBirthDate())
@@ -36,10 +35,35 @@ public class UserMapper {
                 .build();
     }
 
+    // Ajoutez cette méthode pour mettre à jour une entité existante
+    public void updateEntityFromDTO(UserRequestDTO dto, User user) {
+        if (dto.getFirstName() != null) user.setFirstName(dto.getFirstName());
+        if (dto.getLastName() != null) user.setLastName(dto.getLastName());
+        if (dto.getBirthDate() != null) user.setBirthDate(dto.getBirthDate());
+        if (dto.getGender() != null) user.setGender(dto.getGender());
+        if (dto.getNationalId() != null) user.setNationalId(dto.getNationalId());
+        if (dto.getNationality() != null) user.setNationality(dto.getNationality());
+        if (dto.getMaritalStatus() != null) user.setMaritalStatus(dto.getMaritalStatus());
+        if (dto.getPhone() != null) user.setPhone(dto.getPhone());
+        if (dto.getAddress() != null) user.setAddress(dto.getAddress());
+        if (dto.getJobTitle() != null) user.setJobTitle(dto.getJobTitle());
+        if (dto.getDepartment() != null) user.setDepartment(dto.getDepartment());
+        if (dto.getService() != null) user.setService(dto.getService());
+        if (dto.getHireDate() != null) user.setHireDate(dto.getHireDate());
+        if (dto.getContractType() != null) user.setContractType(dto.getContractType());
+        if (dto.getContractEndDate() != null) user.setContractEndDate(dto.getContractEndDate());
+        if (dto.getBaseSalary() != null) user.setBaseSalary(dto.getBaseSalary());
+        if (dto.getHousingAllowance() != null) user.setHousingAllowance(dto.getHousingAllowance());
+        if (dto.getEvaluationScore() != null) user.setEvaluationScore(dto.getEvaluationScore());
+        if (dto.getActive() != null) user.setActive(dto.getActive());
+        if (dto.getSocialSecurityNumber() != null) user.setSocialSecurityNumber(dto.getSocialSecurityNumber());
+        if (dto.getChildrenCount() != null) user.setChildrenCount(dto.getChildrenCount());
+        // Note: Email ne devrait pas être modifiable
+    }
+
     public UserResponseDTO toResponseDTO(User user) {
         return UserResponseDTO.builder()
                 .id(user.getId())
-
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .birthDate(user.getBirthDate())

@@ -12,6 +12,8 @@ import com.example.pfe.exception.ResourceNotFoundException;
 import com.example.pfe.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,493 +31,304 @@ public class UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
-    private final UserMapper userMapper; // Use UserMapper instead of ModelMapper
+    private final UserMapper userMapper;
     private final EmployeeCodeGenerator employeeCodeGenerator;
     private final EmailService emailService;
     private final JwtService jwtService;
 
+    // ==================== CRUD OPERATIONS ====================
+
     /**
-     * Create a new employee with automatic employee code generation
+     * Créer un nouvel utilisateur (pour admin)
      */
     public UserResponseDTO createUser(UserRequestDTO userRequestDTO) {
         log.info("Creating a new user: {}", userRequestDTO.getEmail());
 
-        // 1. Preliminary validations
+        // 1. Validation
         validateUserCreation(userRequestDTO);
 
-        // 2. Generate employee code
+        // 2. Générer code employé
         String employeeCode = generateUniqueEmployeeCode(userRequestDTO);
-        log.info("Employee code generated: {}", employeeCode);
 
-        // 3. Generate a secure temporary password
+        // 3. Générer mot de passe temporaire
         String temporaryPassword = generateTemporaryPassword();
-        log.debug("Temporary password generated for {}", userRequestDTO.getEmail());
 
-        // 4. Map DTO to Entity
-        User user = mapToUserEntity(userRequestDTO, employeeCode, temporaryPassword);
+        // 4. Créer l'entité
+        User user = buildUserEntity(userRequestDTO, employeeCode, temporaryPassword);
 
-        // 5. Assign roles
-        assignRolesToUser(user, userRequestDTO);
+        // 5. Assigner les rôles
+        assignRoles(user, userRequestDTO);
 
-        // 6. Handle hierarchical relationships
+        // 6. Gérer les relations
         setUserRelations(user, userRequestDTO);
 
-        // 7. Save the user to get ID
-        user = userRepository.save(user);
-        log.info("User created with ID: {}", user.getId());
+        // 7. Générer token d'activation
+        String activationToken = generateActivationToken(user);
+        user.setActivationToken(activationToken);
+        user.setActivationTokenExpiry(LocalDateTime.now().plusDays(7));
 
-        // 8. Generate and send activation email
+        // 8. Sauvegarder
+        user = userRepository.save(user);
+
+        // 9. Envoyer email d'activation
         sendActivationEmail(user, employeeCode, temporaryPassword);
 
-        // 9. Return response DTO
-        return convertToResponseDTO(user);
+        log.info("User created successfully: {} (ID: {})", user.getEmail(), user.getId());
+        return userMapper.toResponseDTO(user);
     }
 
     /**
-     * Validate data before creation
+     * Mettre à jour un utilisateur
      */
+    public UserResponseDTO updateUser(Long id, UserRequestDTO userRequestDTO) {
+        log.info("Updating user ID: {}", id);
+
+        User existingUser = getUserEntityById(id);
+
+        // Vérifier si le code employé doit être régénéré
+        if (shouldRegenerateEmployeeCode(existingUser, userRequestDTO)) {
+            String newEmployeeCode = generateUniqueEmployeeCode(userRequestDTO);
+            existingUser.setEmployeeCode(newEmployeeCode);
+            existingUser.setUsername(newEmployeeCode);
+            log.info("Employee code regenerated: {}", newEmployeeCode);
+        }
+
+        // Mapper les champs
+        userMapper.updateEntityFromDTO(userRequestDTO, existingUser);
+
+        // Mettre à jour les rôles si nécessaire
+        if (userRequestDTO.getRoleNames() != null) {
+            assignRoles(existingUser, userRequestDTO);
+        }
+
+        // Mettre à jour les relations
+        setUserRelations(existingUser, userRequestDTO);
+
+        User updatedUser = userRepository.save(existingUser);
+        log.info("User updated successfully: {} (ID: {})", updatedUser.getEmail(), updatedUser.getId());
+
+        return userMapper.toResponseDTO(updatedUser);
+    }
+
+    /**
+     * Récupérer un utilisateur par ID
+     */
+    @Transactional(readOnly = true)
+    public UserResponseDTO getUserById(Long id) {
+        User user = getUserEntityById(id);
+        return userMapper.toResponseDTO(user);
+    }
+
+    /**
+     * Récupérer tous les utilisateurs (avec pagination)
+     */
+    @Transactional(readOnly = true)
+    public Page<UserResponseDTO> getAllUsers(Pageable pageable) {
+        return userRepository.findAll(pageable)
+                .map(userMapper::toResponseDTO);
+    }
+
+    /**
+     * Supprimer un utilisateur (soft delete)
+     */
+    public void deleteUser(Long id) {
+        log.info("Deleting user ID: {}", id);
+        User user = getUserEntityById(id);
+
+        user.setActive(false);
+        user.setEnabled(false);
+        userRepository.save(user);
+
+        log.info("User deactivated: {} (ID: {})", user.getEmail(), user.getId());
+    }
+
+    // ==================== BUSINESS OPERATIONS ====================
+
+    /**
+     * Réactiver un utilisateur
+     */
+    public void reactivateUser(Long id) {
+        User user = getUserEntityById(id);
+        user.setActive(true);
+        user.setEnabled(true);
+        userRepository.save(user);
+        log.info("User reactivated: {}", user.getEmail());
+    }
+
+    /**
+     * Réinitialiser le mot de passe (admin)
+     */
+    public void resetUserPassword(Long id) {
+        User user = getUserEntityById(id);
+
+        String newTemporaryPassword = generateTemporaryPassword();
+        user.setPasswordHash(passwordEncoder.encode(newTemporaryPassword));
+        user.setFirstLogin(true);
+        userRepository.save(user);
+
+        // Envoyer email avec nouveau mot de passe
+        emailService.sendPasswordResetEmail(
+                user.getEmail(),
+                user.getFirstName() + " " + user.getLastName(),
+                newTemporaryPassword,
+                user.getEmployeeCode()
+        );
+
+        log.info("Password reset for user: {}", user.getEmail());
+    }
+
+    /**
+     * Rechercher des utilisateurs
+     */
+    @Transactional(readOnly = true)
+    public List<UserResponseDTO> searchUsers(String keyword, String department, Boolean active) {
+        // Utilisez la méthode qui accepte String comme département
+        return userRepository.searchUsersWithStringDepartment(keyword, department, active).stream()
+                .map(userMapper::toResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Récupérer les managers disponibles
+     */
+    @Transactional(readOnly = true)
+    public List<UserResponseDTO> getAvailableManagers() {
+        return userRepository.findAvailableManagers().stream()
+                .map(userMapper::toResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    // ==================== PRIVATE HELPER METHODS ====================
+
+    private User getUserEntityById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User with ID " + id + " not found"));
+    }
+
     private void validateUserCreation(UserRequestDTO userRequestDTO) {
-        // Check email uniqueness
         if (userRepository.existsByEmail(userRequestDTO.getEmail())) {
-            throw new BusinessException("A user with email '" + userRequestDTO.getEmail() + "' already exists");
+            throw new BusinessException("Email already exists");
         }
-
-        // Check national ID uniqueness
         if (userRepository.existsByNationalId(userRequestDTO.getNationalId())) {
-            throw new BusinessException("A user with national ID '" + userRequestDTO.getNationalId() + "' already exists");
-        }
-
-        // Check hire date
-        if (userRequestDTO.getHireDate() != null && userRequestDTO.getHireDate().isAfter(java.time.LocalDate.now())) {
-            throw new BusinessException("Hire date cannot be in the future");
-        }
-
-        // Check birth date
-        if (userRequestDTO.getBirthDate() != null && !userRequestDTO.getBirthDate().isBefore(java.time.LocalDate.now().minusYears(16))) {
-            throw new BusinessException("Employee must be at least 16 years old");
+            throw new BusinessException("National ID already exists");
         }
     }
 
-    /**
-     * Generate a unique employee code
-     */
     private String generateUniqueEmployeeCode(UserRequestDTO userRequestDTO) {
-        String employeeCode;
+        String code;
         int attempts = 0;
-        final int MAX_ATTEMPTS = 10;
 
         do {
-            // Create a temporary user to generate the code
             User tempUser = new User();
             tempUser.setJobTitle(userRequestDTO.getJobTitle());
             tempUser.setDepartment(userRequestDTO.getDepartment());
-
-            employeeCode = employeeCodeGenerator.generateEmployeeCode(tempUser);
-
+            code = employeeCodeGenerator.generateEmployeeCode(tempUser);
             attempts++;
-            if (attempts > MAX_ATTEMPTS) {
-                throw new BusinessException("Unable to generate unique employee code after " + MAX_ATTEMPTS + " attempts");
+
+            if (attempts > 10) {
+                throw new BusinessException("Failed to generate unique employee code");
             }
+        } while (userRepository.existsByEmployeeCode(code));
 
-        } while (userRepository.existsByEmployeeCode(employeeCode));
-
-        log.debug("Unique employee code generated after {} attempt(s): {}", attempts, employeeCode);
-        return employeeCode;
+        return code;
     }
 
-    /**
-     * Generate a secure temporary password
-     */
     private String generateTemporaryPassword() {
-        String upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        String lower = "abcdefghijklmnopqrstuvwxyz";
-        String digits = "0123456789";
-        String special = "!@#$%";
-
-        Random random = new Random();
-        StringBuilder password = new StringBuilder();
-
-        // Ensure at least one character of each type
-        password.append(upper.charAt(random.nextInt(upper.length())));
-        password.append(lower.charAt(random.nextInt(lower.length())));
-        password.append(digits.charAt(random.nextInt(digits.length())));
-        password.append(special.charAt(random.nextInt(special.length())));
-
-        // Add 4 additional random characters
-        String allChars = upper + lower + digits + special;
-        for (int i = 0; i < 4; i++) {
-            password.append(allChars.charAt(random.nextInt(allChars.length())));
-        }
-
-        // Shuffle characters
-        char[] chars = password.toString().toCharArray();
-        for (int i = chars.length - 1; i > 0; i--) {
-            int j = random.nextInt(i + 1);
-            char temp = chars[i];
-            chars[i] = chars[j];
-            chars[j] = temp;
-        }
-
-        return new String(chars);
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%";
+        Random rnd = new Random();
+        return rnd.ints(12, 0, chars.length())
+                .mapToObj(i -> String.valueOf(chars.charAt(i)))
+                .collect(Collectors.joining());
     }
 
-    /**
-     * Map DTO to User entity with authentication information
-     */
-    private User mapToUserEntity(UserRequestDTO userRequestDTO, String employeeCode, String temporaryPassword) {
-        // Use UserMapper to map basic fields
-        User user = userMapper.toEntity(userRequestDTO);
+    private User buildUserEntity(UserRequestDTO dto, String employeeCode, String tempPassword) {
+        User user = userMapper.toEntity(dto);
 
-        // Define authentication information
         user.setEmployeeCode(employeeCode);
-        user.setUsername(employeeCode); // Default username = employee code
-        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
-
-        // Account status
-        user.setEnabled(false); // Account disabled until activation
-        user.setFirstLogin(true); // First login required
+        user.setUsername(employeeCode);
+        user.setPasswordHash(passwordEncoder.encode(tempPassword));
+        user.setEnabled(false);
+        user.setFirstLogin(true);
+        user.setActive(true);
         user.setAccountNonExpired(true);
-        user.setCredentialsNonExpired(true);
         user.setAccountNonLocked(true);
-
-        // Activate by default unless specified otherwise
-        if (user.getActive() == null) {
-            user.setActive(true);
-        }
-
-        // Generate activation token
-        String activationToken = generateActivationToken(user);
-        user.setActivationToken(activationToken);
-        user.setActivationTokenExpiry(LocalDateTime.now().plusDays(7)); // Valid for 7 days
+        user.setCredentialsNonExpired(true);
 
         return user;
     }
 
-    /**
-     * Generate JWT token for account activation
-     */
+    private void assignRoles(User user, UserRequestDTO dto) {
+        List<Role> roles = new ArrayList<>();
+
+        if (dto.getRoleNames() != null && !dto.getRoleNames().isEmpty()) {
+            for (String roleName : dto.getRoleNames()) {
+                try {
+                    RoleName roleNameEnum = RoleName.valueOf(roleName.toUpperCase());
+                    Role role = roleRepository.findByName(roleNameEnum)
+                            .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleName));
+
+                    // Éviter les doublons
+                    if (roles.stream().noneMatch(r -> r.getId().equals(role.getId()))) {
+                        roles.add(role);
+                    }
+                } catch (IllegalArgumentException e) {
+                    throw new BusinessException("Invalid role name: " + roleName);
+                }
+            }
+        } else {
+            // Rôle par défaut
+            Role defaultRole = roleRepository.findByName(RoleName.EMPLOYEE)
+                    .orElseThrow(() -> new ResourceNotFoundException("EMPLOYEE role not found"));
+            roles.add(defaultRole);
+        }
+
+        user.setRoles(roles);
+    }
+
+    private void setUserRelations(User user, UserRequestDTO dto) {
+        if (dto.getDirectManagerId() != null) {
+            User manager = userRepository.findById(dto.getDirectManagerId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Direct manager not found"));
+            user.setDirectManager(manager);
+        }
+
+        if (dto.getAssignedProjectManagerId() != null) {
+            User pm = userRepository.findById(dto.getAssignedProjectManagerId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Project manager not found"));
+            user.setAssignedProjectManager(pm);
+        }
+    }
+
     private String generateActivationToken(User user) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
         claims.put("email", user.getEmail());
         claims.put("employeeCode", user.getEmployeeCode());
-        claims.put("firstName", user.getFirstName());
-        claims.put("lastName", user.getLastName());
         claims.put("type", "ACCOUNT_ACTIVATION");
 
-        // Token valid for 7 days
         return jwtService.generateTokenWithExpiration(
                 claims,
                 user.getEmail(),
-                7 * 24 * 60 * 60 * 1000L
+                7 * 24 * 60 * 60 * 1000L // 7 jours
         );
     }
 
-    /**
-     * Assign roles to user
-     */
-    private void assignRolesToUser(User user, UserRequestDTO userRequestDTO) {
-        List<Role> roles = new ArrayList<>();
-
-        // By default, assign EMPLOYEE role
-        Role defaultRole = roleRepository.findByName(RoleName.EmPLOYEE)
-                .orElseThrow(() -> new ResourceNotFoundException("EMPLOYEE role not found in database"));
-        roles.add(defaultRole);
-
-        // If needed to assign other roles, add logic here
-        if (userRequestDTO.getJobTitle() != null) {
-            assignAdditionalRolesBasedOnJobTitle(userRequestDTO.getJobTitle(), roles);
-        }
-
-        user.setRoles(roles);
-        log.debug("Roles assigned to user {}: {}", user.getEmail(),
-                roles.stream().map(r -> r.getName().name()).collect(Collectors.toList()));
-    }
-
-    /**
-     * Assign additional roles based on job title
-     */
-    private void assignAdditionalRolesBasedOnJobTitle(String jobTitle, List<Role> roles) {
-        String title = jobTitle.toLowerCase();
-
-        if (title.contains("manager") || title.contains("chef") || title.contains("directeur")) {
-            roleRepository.findByName(RoleName.PROJECT_MANAGER).ifPresent(roles::add);
-        }
-
-        if (title.contains("admin") || title.contains("administrateur")) {
-            roleRepository.findByName(RoleName.ADMIN).ifPresent(roles::add);
-        }
-
-        if (title.contains("directeur général") || title.contains("general manager")) {
-            roleRepository.findByName(RoleName.GENERAL_MANAGER).ifPresent(roles::add);
-        }
-    }
-
-    /**
-     * Define hierarchical relationships
-     */
-    private void setUserRelations(User user, UserRequestDTO userRequestDTO) {
-        // Direct manager
-        if (userRequestDTO.getDirectManagerId() != null) {
-            User directManager = userRepository.findById(userRequestDTO.getDirectManagerId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Direct manager with ID " + userRequestDTO.getDirectManagerId() + " not found"));
-            user.setDirectManager(directManager);
-        }
-
-        // Assigned project manager
-        if (userRequestDTO.getAssignedProjectManagerId() != null) {
-            User projectManager = userRepository.findById(userRequestDTO.getAssignedProjectManagerId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "Project manager with ID " + userRequestDTO.getAssignedProjectManagerId() + " not found"));
-            user.setAssignedProjectManager(projectManager);
-        }
-    }
-
-    /**
-     * Send activation email with credentials
-     */
-    private void sendActivationEmail(User user, String employeeCode, String temporaryPassword) {
+    private void sendActivationEmail(User user, String employeeCode, String tempPassword) {
         try {
             emailService.sendWelcomeEmail(
                     user.getEmail(),
                     user.getFirstName() + " " + user.getLastName(),
                     employeeCode,
-                    temporaryPassword,
+                    tempPassword,
                     user.getActivationToken()
             );
-            log.info("Activation email sent to {}", user.getEmail());
         } catch (Exception e) {
-            log.error("Error sending activation email to {}: {}",
-                    user.getEmail(), e.getMessage());
-            // Do not block user creation if email fails
+            log.error("Failed to send activation email to {}: {}", user.getEmail(), e.getMessage());
         }
     }
 
-    /**
-     * Convert User entity to UserResponseDTO
-     */
-    private UserResponseDTO convertToResponseDTO(User user) {
-        return userMapper.toResponseDTO(user);
-    }
-
-    /**
-     * Update an existing user
-     */
-    public UserResponseDTO updateUser(Long id, UserRequestDTO userRequestDTO) {
-        return null;
-    }
-
-    /**
-     * Determine if employee code should be regenerated
-     */
     private boolean shouldRegenerateEmployeeCode(User existingUser, UserRequestDTO newData) {
-        // Regenerate if department changes
-        if (existingUser.getDepartment() != newData.getDepartment()) {
-            return true;
-        }
-
-        // Regenerate if job title changes
-        if (existingUser.getJobTitle() != null && newData.getJobTitle() != null &&
-                !existingUser.getJobTitle().equals(newData.getJobTitle())) {
-            return true;
-        }
-
-        return false;
-    }
-
-    /**
-     * Get all users
-     */
-    @Transactional(readOnly = true)
-    public List<UserResponseDTO> getAllUsers() {
-        log.debug("Retrieving all users");
-        return userRepository.findAll().stream()
-                .map(this::convertToResponseDTO)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Get user by ID
-     */
-    @Transactional(readOnly = true)
-    public UserResponseDTO getUserById(Long id) {
-        log.debug("Retrieving user with ID: {}", id);
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User with ID " + id + " not found"));
-        return convertToResponseDTO(user);
-    }
-
-    /**
-     * Get user by employee code
-     */
-    @Transactional(readOnly = true)
-    public UserResponseDTO getUserByEmployeeCode(String employeeCode) {
-        log.debug("Retrieving user with employee code: {}", employeeCode);
-        User user = userRepository.findByEmployeeCode(employeeCode)
-                .orElseThrow(() -> new ResourceNotFoundException("User with employee code " + employeeCode + " not found"));
-        return convertToResponseDTO(user);
-    }
-
-    /**
-     * Deactivate a user (soft delete)
-     */
-    public void deactivateUser(Long id) {
-        log.info("Deactivating user with ID: {}", id);
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User with ID " + id + " not found"));
-
-        user.setActive(false);
-        user.setEnabled(false); // Also disable access
-        userRepository.save(user);
-
-        log.info("User {} deactivated successfully", user.getEmail());
-    }
-
-    /**
-     * Reactivate a user
-     */
-    public void reactivateUser(Long id) {
-        log.info("Reactivating user with ID: {}", id);
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User with ID " + id + " not found"));
-
-        user.setActive(true);
-        user.setEnabled(true); // Also enable access
-        userRepository.save(user);
-
-        log.info("User {} reactivated successfully", user.getEmail());
-    }
-
-    /**
-     * Reset user password (admin only)
-     */
-    public void resetUserPassword(Long id) {
-        log.info("Resetting password for user with ID: {}", id);
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("User with ID " + id + " not found"));
-
-        // Generate new temporary password
-        String newTemporaryPassword = generateTemporaryPassword();
-        user.setPasswordHash(passwordEncoder.encode(newTemporaryPassword));
-        user.setFirstLogin(true); // Force password change on next login
-        user.setCredentialsNonExpired(true);
-
-        userRepository.save(user);
-
-        // Send new password via email
-        try {
-            emailService.sendPasswordResetEmail(
-                    user.getEmail(),
-                    user.getFirstName() + " " + user.getLastName(),
-                    newTemporaryPassword,
-                    user.getEmployeeCode()
-            );
-            log.info("Password reset email sent to {}", user.getEmail());
-        } catch (Exception e) {
-            log.error("Error sending password reset email: {}", e.getMessage());
-            throw new BusinessException("Error sending password reset email");
-        }
-    }
-
-    /**
-     * Search users by criteria
-     */
-    @Transactional(readOnly = true)
-    public List<UserResponseDTO> searchUsers(String keyword, String department, Boolean active) {
-        log.debug("Searching users with keyword: {}, department: {}, active: {}",
-                keyword, department, active);
-
-        // Convert string department to enum if necessary
-        com.example.pfe.enums.Department deptEnum = null;
-        if (department != null && !department.isEmpty()) {
-            try {
-                deptEnum = com.example.pfe.enums.Department.valueOf(department.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid department: {}", department);
-            }
-        }
-
-        return userRepository.searchUsers(keyword, deptEnum, active).stream()
-                .map(this::convertToResponseDTO)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Count total number of users
-     */
-    @Transactional(readOnly = true)
-    public long countUsers() {
-        return userRepository.count();
-    }
-
-    /**
-     * Count users by department
-     */
-    @Transactional(readOnly = true)
-    public Map<String, Long> countUsersByDepartment() {
-        return userRepository.findAll().stream()
-                .filter(user -> user.getDepartment() != null)
-                .collect(Collectors.groupingBy(
-                        user -> user.getDepartment().name(),
-                        Collectors.counting()
-                ));
-    }
-
-    /**
-     * Check if an employee code exists
-     */
-    @Transactional(readOnly = true)
-    public boolean existsByEmployeeCode(String employeeCode) {
-        return userRepository.existsByEmployeeCode(employeeCode);
-    }
-
-    /**
-     * Check if an email exists
-     */
-    @Transactional(readOnly = true)
-    public boolean existsByEmail(String email) {
-        return userRepository.existsByEmail(email);
-    }
-
-    /**
-     * Get users by department
-     */
-    @Transactional(readOnly = true)
-    public List<UserResponseDTO> getUsersByDepartment(String department) {
-        log.debug("Retrieving users from department: {}", department);
-
-        com.example.pfe.enums.Department deptEnum = null;
-        if (department != null && !department.isEmpty()) {
-            try {
-                deptEnum = com.example.pfe.enums.Department.valueOf(department.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid department: {}", department);
-                return new ArrayList<>();
-            }
-        }
-
-        return userRepository.findByDepartment(deptEnum).stream()
-                .map(this::convertToResponseDTO)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Get available managers for assignment
-     */
-    @Transactional(readOnly = true)
-    public List<UserResponseDTO> getAvailableManagers() {
-        log.debug("Retrieving available managers");
-
-        // Get users with manager roles
-        return userRepository.findByRoles_NameIn(
-                        Arrays.asList(RoleName.GENERAL_MANAGER, RoleName.PROJECT_MANAGER)
-                ).stream()
-                .filter(user -> user.getActive() != null && user.getActive()) // ✅ Use getActive() instead of isActive()
-                .map(this::convertToResponseDTO)
-                .collect(Collectors.toList());
-    }
-
-    public void deleteUser(Long id) {
+        return !Objects.equals(existingUser.getDepartment(), newData.getDepartment()) ||
+                !Objects.equals(existingUser.getJobTitle(), newData.getJobTitle());
     }
 }

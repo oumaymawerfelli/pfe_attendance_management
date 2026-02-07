@@ -11,5 +11,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ResendActivationResponseDTO {
     private String message;
+    private String email;
+    @Builder.Default
     private boolean success = true;
 }

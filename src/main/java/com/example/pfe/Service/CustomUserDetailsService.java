@@ -15,16 +15,13 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-//UserDetailsService is an interface Spring Security uses to load user data during authentication
 public class CustomUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
 
     @Override
     @Transactional(readOnly = true)
-    //find the user and return a UserDetails object that contains username, password, account status, and roles.
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // Try to find by username first, then by email, then by employee code
         User user = userRepository.findByUsername(username)
                 .orElseGet(() -> userRepository.findByEmail(username)
                         .orElseGet(() -> userRepository.findByEmployeeCode(username)
@@ -35,16 +32,14 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("User account is disabled: " + username);
         }
 
-        // Convert roles to GrantedAuthority
-        //Spring Security uses GrantedAuthority objects to represent roles or permissions.
-        //This converts your user’s roles (from database) into a list Spring Security can understand.
+        // 🔥 FIX HERE: Add "ROLE_" prefix for Spring Security
         List<SimpleGrantedAuthority> authorities = user.getRoles().stream()
-                .map(role -> new SimpleGrantedAuthority(role.getName().name()))
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name())) // ADD "ROLE_"
                 .collect(Collectors.toList());
-//Spring Security uses this to authenticate and authorize the user.
+
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
-                user.getPasswordHash(), // This should be BCrypt encoded
+                user.getPasswordHash(),
                 user.isEnabled(),
                 user.isAccountNonExpired(),
                 user.isCredentialsNonExpired(),
