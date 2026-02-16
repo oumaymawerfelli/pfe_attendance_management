@@ -12,6 +12,7 @@ public class TeamAssignment {
 
    @Id
    @GeneratedValue(strategy = GenerationType.IDENTITY)
+   @Column(name = "IdTeam")
    private Integer id;
 
    @Column(name = "added_date")

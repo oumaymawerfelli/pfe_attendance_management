@@ -315,7 +315,6 @@ public class ProjectServiceImpl implements ProjectService {
             dto.setProjectManagerName(
                     project.getProjectManager().getFirstName() + " " +
                             project.getProjectManager().getLastName());
-            dto.setProjectManagerCode(project.getProjectManager().getEmployeeCode());
             dto.setProjectManagerEmail(project.getProjectManager().getEmail());
         }
 
@@ -352,7 +351,6 @@ public class ProjectServiceImpl implements ProjectService {
                 .firstName(assignment.getEmployee().getFirstName())
                 .lastName(assignment.getEmployee().getLastName())
                 .email(assignment.getEmployee().getEmail())
-                .employeeCode(assignment.getEmployee().getEmployeeCode())
                 .assignedDate(assignment.getAddedDate())
                 .assigningManager(
                         assignment.getAssigningManager().getFirstName() + " " +
@@ -375,7 +373,6 @@ public class ProjectServiceImpl implements ProjectService {
         target.setCreatedAt(source.getCreatedAt());
         target.setUpdatedAt(source.getUpdatedAt());
         target.setProjectManagerName(source.getProjectManagerName());
-        target.setProjectManagerCode(source.getProjectManagerCode());
         target.setProjectManagerEmail(source.getProjectManagerEmail());
     }
 

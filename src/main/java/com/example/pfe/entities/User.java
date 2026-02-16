@@ -18,15 +18,14 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Entity
-@Table(name = "users")
+@Table(name = "userEmploye")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class User {
 
    @Id
    @GeneratedValue(strategy = GenerationType.IDENTITY)
+   @Column(name = "idEmploye")
    private Long id;
-
-   private String employeeCode;
    private String lastName;
    private String firstName;
 
@@ -141,6 +140,14 @@ public class User {
 
    @Builder.Default
    public Boolean active = true;
+
+   /**
+    * Indicates that this user was self-registered and is waiting
+    * for an administrator / general manager approval before the
+    * activation email is sent.
+    */
+   @Builder.Default
+   private boolean registrationPending = false;
 
    @Column(columnDefinition = "TEXT")  // TEXT has unlimited length
    private String activationToken;

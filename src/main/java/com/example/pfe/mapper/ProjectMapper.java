@@ -50,7 +50,6 @@ public class ProjectMapper {
                     project.getProjectManager().getFirstName() + " " +
                             project.getProjectManager().getLastName()
             );
-            dto.setProjectManagerCode(project.getProjectManager().getEmployeeCode());
             dto.setProjectManagerEmail(project.getProjectManager().getEmail());
         }
 

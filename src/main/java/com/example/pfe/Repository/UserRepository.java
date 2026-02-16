@@ -17,19 +17,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsernameOrEmail(String username, String email);
     boolean existsByEmail(String email);
     boolean existsByNationalId(String nationalId);
-    boolean existsByEmployeeCode(String employeeCode);
     boolean existsByUsername(String username);
 
     // Ajoutez cette méthode pour trouver par token d'activation
     Optional<User> findByActivationToken(String activationToken);
+
+    // Self‑registration approval flow
+    List<User> findByRegistrationPendingTrue();
 
     // Pour la recherche
     @Query("SELECT u FROM User u WHERE " +
             "(:keyword IS NULL OR " +
             "LOWER(u.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(u.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-            "LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-            "u.employeeCode LIKE CONCAT('%', :keyword, '%')) AND " +
+            "LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND " +
             "(:department IS NULL OR u.department = :department) AND " +
             "(:active IS NULL OR u.active = :active)")
     List<User> searchUsers(@Param("keyword") String keyword,
@@ -41,8 +42,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "(:keyword IS NULL OR " +
             "LOWER(u.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(u.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-            "LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
-            "u.employeeCode LIKE CONCAT('%', :keyword, '%')) AND " +
+            "LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%'))) AND " +
             "(:department IS NULL OR CAST(u.department AS string) = :department) AND " +
             "(:active IS NULL OR u.active = :active)")
     List<User> searchUsersWithStringDepartment(
@@ -57,8 +57,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // Par département
     List<User> findByDepartment(Department department);
 
-    Optional<User> findByEmployeeCode(String employeeCode);
-
     // Managers disponibles
     @Query("SELECT DISTINCT u FROM User u " +
             "JOIN u.roles r " +
@@ -67,4 +65,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "AND u.active = true " +
             "AND u.enabled = true")
     List<User> findAvailableManagers();
+
+
+    long countByDepartment(Department department);
+
 }

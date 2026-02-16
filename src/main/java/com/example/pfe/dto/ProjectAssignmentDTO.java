@@ -8,8 +8,8 @@ public class ProjectAssignmentDTO {
     @NotNull(message = "Project ID is required")
     private Long projectId;
 
-    @NotNull(message = "Employee code is required")
-    private String employeeCode;
+    @NotNull(message = "Employee email is required")
+    private String employeeEmail;
 
     private String assignmentNotes;
 }

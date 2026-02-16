@@ -82,7 +82,7 @@ public class JwtService {
         return extractUsernameOptional(token).orElse(null);
     }
 
-    // Nouvelle méthode générique pour extraire n'importe quel claim
+    //  méthode générique pour extraire n'importe quel claim
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         try {
             Claims claims = parseClaims(token);
@@ -168,8 +168,10 @@ public class JwtService {
                 return false;
             }
 
+            // 🔥 FIX: Compare avec l'EMAIL, pas avec le username
             if (!subject.equals(userDetails.getUsername())) {
-                log.debug("isTokenValid(user): token subject '{}' does not match user '{}'", subject, userDetails.getUsername());
+                log.debug("isTokenValid(user): token subject '{}' does not match user '{}'",
+                        subject, userDetails.getUsername());
                 return false;
             }
 
@@ -180,7 +182,6 @@ public class JwtService {
             }
 
             Object type = claims.get("type");
-            // Accepter "access" (minuscules) ET "ACCESS" (majuscules)
             if (type != null) {
                 String typeStr = type.toString();
                 boolean isValidType = "access".equalsIgnoreCase(typeStr)
@@ -204,7 +205,6 @@ public class JwtService {
             return false;
         }
     }
-
     private Claims parseClaims(String token) {
         return Jwts.parserBuilder()
                 .setAllowedClockSkewSeconds(clockSkewSeconds)
@@ -292,9 +292,8 @@ public class JwtService {
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
-        claims.put("type", "access");  // ← CHANGEZ EN MINUSCULES POUR ÊTRE COHÉRENT
+        claims.put("type", "access");
         claims.put("email", user.getEmail());
-        claims.put("employeeCode", user.getEmployeeCode());
 
         if (user.getRoles() != null) {
             List<String> roles = user.getRoles().stream()
@@ -305,7 +304,8 @@ public class JwtService {
 
         return Jwts.builder()
                 .setClaims(claims)
-                .setSubject(user.getEmployeeCode())
+                // Use professional email as JWT subject
+                .setSubject(user.getEmail())
                 .setIssuedAt(issuedAt)
                 .setExpiration(exp)
                 .signWith(signingKey, SignatureAlgorithm.HS256)

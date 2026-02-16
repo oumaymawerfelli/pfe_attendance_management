@@ -25,7 +25,7 @@ public class DataInitializer {
     @PostConstruct
     public void init() {
         try {
-            System.out.println("🔥🔥🔥 DataInitializer.init() STARTING 🔥🔥🔥");
+            System.out.println(" DataInitializer.init() STARTING ");
 
             // Create default roles if they don't exist
             createDefaultRoles();
@@ -40,22 +40,22 @@ public class DataInitializer {
                 createTestUser();
             }
 
-            System.out.println("🔥🔥🔥 DataInitializer.init() COMPLETED SUCCESSFULLY 🔥🔥🔥");
+            System.out.println(" DataInitializer.init() COMPLETED SUCCESSFULLY ");
         } catch (Exception e) {
-            System.err.println("🔥🔥🔥 CRITICAL ERROR in DataInitializer: " + e.getMessage());
+            System.err.println(" CRITICAL ERROR in DataInitializer: " + e.getMessage());
             e.printStackTrace();
             throw e; // Re-throw to see full stack trace
         }
     }
 
     private void createDefaultRoles() {
-        System.out.println("🔥 Creating default roles...");
+        System.out.println(" Creating default roles...");
 
         for (RoleName roleName : RoleName.values()) {
             try {
-                System.out.println("🔥 Checking role: " + roleName);
+                System.out.println(" Checking role: " + roleName);
                 boolean exists = roleRepository.existsByName(roleName);
-                System.out.println("🔥 Role " + roleName + " exists? " + exists);
+                System.out.println(" Role " + roleName + " exists? " + exists);
 
                 if (!exists) {
                     Role role = new Role();
@@ -71,10 +71,10 @@ public class DataInitializer {
                     }
 
                     roleRepository.save(role);
-                    System.out.println("✅ Created role: " + roleName);
+                    System.out.println("Created role: " + roleName);
                 }
             } catch (Exception e) {
-                System.err.println("🔥 ERROR creating role " + roleName + ": " + e.getMessage());
+                System.err.println(" ERROR creating role " + roleName + ": " + e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -82,7 +82,7 @@ public class DataInitializer {
 
     private void createAdminUser() {
         try {
-            System.out.println("🔥 Creating admin user...");
+            System.out.println(" Creating admin user...");
 
             // First, make sure ADMIN role exists
             Role adminRole = roleRepository.findByName(RoleName.ADMIN)
@@ -107,16 +107,16 @@ public class DataInitializer {
             admin.setRoles(Collections.singletonList(adminRole));
 
             userRepository.save(admin);
-            System.out.println("✅ Created admin user: admin / Admin@123");
+            System.out.println(" Created admin user: admin / Admin@123");
         } catch (Exception e) {
-            System.err.println("🔥 ERROR creating admin user: " + e.getMessage());
+            System.err.println(" ERROR creating admin user: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
     private void createTestUser() {
         try {
-            System.out.println("🔥 Creating test user...");
+            System.out.println(" Creating test user...");
 
             // First, make sure EMPLOYEE role exists
             Role employeeRole = roleRepository.findByName(RoleName.EMPLOYEE)
@@ -141,9 +141,9 @@ public class DataInitializer {
             testUser.setRoles(Collections.singletonList(employeeRole));
 
             userRepository.save(testUser);
-            System.out.println("✅ Created test user: test / Test@123");
+            System.out.println(" Created test user: test / Test@123");
         } catch (Exception e) {
-            System.err.println("🔥 ERROR creating test user: " + e.getMessage());
+            System.err.println(" ERROR creating test user: " + e.getMessage());
             e.printStackTrace();
         }
     }*/

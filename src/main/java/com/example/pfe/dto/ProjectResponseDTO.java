@@ -21,6 +21,5 @@ public class ProjectResponseDTO {
 
     // Informations du manager (seulement en réponse)
     private String projectManagerName;
-    private String projectManagerCode;
     private String projectManagerEmail;
 }

@@ -109,4 +109,5 @@ public class RegisterRequestDTO {
             throw new IllegalArgumentException("Contract end date cannot be before hire date");
         }
     }
+
 }

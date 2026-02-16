@@ -12,7 +12,6 @@ public class TeamMemberDTO {
     private String firstName;
     private String lastName;
     private String email;
-    private String employeeCode;
     private LocalDate assignedDate;
     private String assigningManager;
 }

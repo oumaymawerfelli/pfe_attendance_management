@@ -21,24 +21,23 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     @Transactional(readOnly = true)
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username)
-                .orElseGet(() -> userRepository.findByEmail(username)
-                        .orElseGet(() -> userRepository.findByEmployeeCode(username)
-                                .orElseThrow(() -> new UsernameNotFoundException(
-                                        "User not found with identifier: " + username))));
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        // ✅ UNIQUEMENT par email (c'est votre identifiant unique)
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException(
+                        "User not found with email: " + email));
 
         if (!user.isEnabled()) {
-            throw new UsernameNotFoundException("User account is disabled: " + username);
+            throw new UsernameNotFoundException("User account is disabled: " + email);
         }
 
-        // 🔥 FIX HERE: Add "ROLE_" prefix for Spring Security
         List<SimpleGrantedAuthority> authorities = user.getRoles().stream()
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name())) // ADD "ROLE_"
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name()))
                 .collect(Collectors.toList());
 
+        // ✅ Utilise EMAIL comme username Spring Security
         return new org.springframework.security.core.userdetails.User(
-                user.getUsername(),
+                user.getEmail(),  // ← ICI: email au lieu de username
                 user.getPasswordHash(),
                 user.isEnabled(),
                 user.isAccountNonExpired(),
@@ -46,5 +45,4 @@ public class CustomUserDetailsService implements UserDetailsService {
                 user.isAccountNonLocked(),
                 authorities
         );
-    }
-}
+    }}

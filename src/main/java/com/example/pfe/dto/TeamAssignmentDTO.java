@@ -16,4 +16,5 @@ public class TeamAssignmentDTO {
     private Long assigningManagerId;
 
     private String notes;
+
 }

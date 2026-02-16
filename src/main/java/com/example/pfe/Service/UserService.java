@@ -32,7 +32,6 @@ public class UserService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserMapper userMapper;
-    private final EmployeeCodeGenerator employeeCodeGenerator;
     private final EmailService emailService;
     private final JwtService jwtService;
 
@@ -47,14 +46,11 @@ public class UserService {
         // 1. Validation
         validateUserCreation(userRequestDTO);
 
-        // 2. Générer code employé
-        String employeeCode = generateUniqueEmployeeCode(userRequestDTO);
-
-        // 3. Générer mot de passe temporaire
+        // 2. Générer mot de passe temporaire
         String temporaryPassword = generateTemporaryPassword();
 
-        // 4. Créer l'entité
-        User user = buildUserEntity(userRequestDTO, employeeCode, temporaryPassword);
+        // 3. Créer l'entité
+        User user = buildUserEntity(userRequestDTO, temporaryPassword);
 
         // 5. Assigner les rôles
         assignRoles(user, userRequestDTO);
@@ -62,16 +58,16 @@ public class UserService {
         // 6. Gérer les relations
         setUserRelations(user, userRequestDTO);
 
-        // 7. Générer token d'activation
+        // 4. Générer token d'activation
         String activationToken = generateActivationToken(user);
         user.setActivationToken(activationToken);
         user.setActivationTokenExpiry(LocalDateTime.now().plusDays(7));
 
-        // 8. Sauvegarder
+        // 5. Sauvegarder
         user = userRepository.save(user);
 
-        // 9. Envoyer email d'activation
-        sendActivationEmail(user, employeeCode, temporaryPassword);
+        // 6. Envoyer email d'activation
+        sendActivationEmail(user, temporaryPassword);
 
         log.info("User created successfully: {} (ID: {})", user.getEmail(), user.getId());
         return userMapper.toResponseDTO(user);
@@ -84,14 +80,6 @@ public class UserService {
         log.info("Updating user ID: {}", id);
 
         User existingUser = getUserEntityById(id);
-
-        // Vérifier si le code employé doit être régénéré
-        if (shouldRegenerateEmployeeCode(existingUser, userRequestDTO)) {
-            String newEmployeeCode = generateUniqueEmployeeCode(userRequestDTO);
-            existingUser.setEmployeeCode(newEmployeeCode);
-            existingUser.setUsername(newEmployeeCode);
-            log.info("Employee code regenerated: {}", newEmployeeCode);
-        }
 
         // Mapper les champs
         userMapper.updateEntityFromDTO(userRequestDTO, existingUser);
@@ -170,8 +158,7 @@ public class UserService {
         emailService.sendPasswordResetEmail(
                 user.getEmail(),
                 user.getFirstName() + " " + user.getLastName(),
-                newTemporaryPassword,
-                user.getEmployeeCode()
+                newTemporaryPassword
         );
 
         log.info("Password reset for user: {}", user.getEmail());
@@ -214,25 +201,6 @@ public class UserService {
         }
     }
 
-    private String generateUniqueEmployeeCode(UserRequestDTO userRequestDTO) {
-        String code;
-        int attempts = 0;
-
-        do {
-            User tempUser = new User();
-            tempUser.setJobTitle(userRequestDTO.getJobTitle());
-            tempUser.setDepartment(userRequestDTO.getDepartment());
-            code = employeeCodeGenerator.generateEmployeeCode(tempUser);
-            attempts++;
-
-            if (attempts > 10) {
-                throw new BusinessException("Failed to generate unique employee code");
-            }
-        } while (userRepository.existsByEmployeeCode(code));
-
-        return code;
-    }
-
     private String generateTemporaryPassword() {
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%";
         Random rnd = new Random();
@@ -241,11 +209,11 @@ public class UserService {
                 .collect(Collectors.joining());
     }
 
-    private User buildUserEntity(UserRequestDTO dto, String employeeCode, String tempPassword) {
+    private User buildUserEntity(UserRequestDTO dto, String tempPassword) {
         User user = userMapper.toEntity(dto);
 
-        user.setEmployeeCode(employeeCode);
-        user.setUsername(employeeCode);
+        // Use professional email as username
+        user.setUsername(dto.getEmail());
         user.setPasswordHash(passwordEncoder.encode(tempPassword));
         user.setEnabled(false);
         user.setFirstLogin(true);
@@ -303,7 +271,6 @@ public class UserService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
         claims.put("email", user.getEmail());
-        claims.put("employeeCode", user.getEmployeeCode());
         claims.put("type", "ACCOUNT_ACTIVATION");
 
         return jwtService.generateTokenWithExpiration(
@@ -313,12 +280,11 @@ public class UserService {
         );
     }
 
-    private void sendActivationEmail(User user, String employeeCode, String tempPassword) {
+    private void sendActivationEmail(User user, String tempPassword) {
         try {
             emailService.sendWelcomeEmail(
                     user.getEmail(),
                     user.getFirstName() + " " + user.getLastName(),
-                    employeeCode,
                     tempPassword,
                     user.getActivationToken()
             );

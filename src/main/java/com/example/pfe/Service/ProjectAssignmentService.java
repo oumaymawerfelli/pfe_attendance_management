@@ -34,7 +34,7 @@ public class ProjectAssignmentService {
     @PreAuthorize("hasRole('GENERAL_MANAGER')")
     public void assignProjectToEmployee(ProjectAssignmentDTO assignmentDTO) {
         log.info("Assigning project {} to employee {}",
-                assignmentDTO.getProjectId(), assignmentDTO.getEmployeeCode());
+                assignmentDTO.getProjectId(), assignmentDTO.getEmployeeEmail());
 
         assignSingleProject(assignmentDTO);
     }
@@ -72,9 +72,9 @@ public class ProjectAssignmentService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Project not found: " + assignment.getProjectId()));
 
-        User employee = userRepository.findByEmployeeCode(assignment.getEmployeeCode())
+        User employee = userRepository.findByEmail(assignment.getEmployeeEmail())
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Employee not found: " + assignment.getEmployeeCode()));
+                        "Employee not found with email: " + assignment.getEmployeeEmail()));
 
         validateAssignment(project, employee);
         addProjectManagerRole(employee);
@@ -92,7 +92,7 @@ public class ProjectAssignmentService {
         if (project.getProjectManager() != null &&
                 project.getProjectManager().getId().equals(employee.getId())) {
             throw new BusinessException(
-                    employee.getEmployeeCode() + " is already the manager of this project");
+                    employee.getEmail() + " is already the manager of this project");
         }
 
         if (!employee.isEnabled() || !Boolean.TRUE.equals(employee.getActive())) {
@@ -117,7 +117,7 @@ public class ProjectAssignmentService {
                         employee.getRoles().add(role);
                         userRepository.save(employee);
                         log.info("Added PROJECT_MANAGER role to employee: {}",
-                                employee.getEmployeeCode());
+                                employee.getEmail());
                     });
         }
     }
@@ -133,7 +133,7 @@ public class ProjectAssignmentService {
             if (removed) {
                 userRepository.save(employee);
                 log.info("Removed PROJECT_MANAGER role from employee: {}",
-                        employee.getEmployeeCode());
+                        employee.getEmail());
             }
         }
     }

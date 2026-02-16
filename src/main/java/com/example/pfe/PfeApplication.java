@@ -2,8 +2,10 @@ package com.example.pfe;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
+@EnableAsync
 public class PfeApplication {
 
     public static void main(String[] args) {

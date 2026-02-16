@@ -34,15 +34,8 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.getProjectById(id));
     }
 
-   /* @PutMapping("/{id}/assign-manager")
-    @PreAuthorize("hasRole('GENERAL_MANAGER')")
-    public ResponseEntity<ProjectResponseDTO> assignManager(
-            @PathVariable Long id,
-            @RequestParam String employeeCode,
-            @RequestParam(required = false) String notes) {
-        return ResponseEntity.ok(projectService.assignProjectManager(id, employeeCode, notes));
-    }
-*/
+    /* Legacy endpoints using employeeCode have been removed.
+     * Assignment is now done via dedicated services using employee email. */
     @PutMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER') or @securityService.isProjectManager(#id)")
     public ResponseEntity<ProjectResponseDTO> updateStatus(
@@ -51,11 +44,4 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.updateProjectStatus(id, status));
     }
 
-  /*  @GetMapping("/managed-by/{employeeCode}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER') or #employeeCode == authentication.principal.username")
-    public ResponseEntity<List<ProjectResponseDTO>> getManagedProjects(
-            @PathVariable String employeeCode) {
-        return ResponseEntity.ok(projectService.getProjectsManagedByEmployee(employeeCode));
-    }
-*/
 }
