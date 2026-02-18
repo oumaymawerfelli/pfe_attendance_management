@@ -10,6 +10,6 @@ public interface IUserService {
     List<UserResponseDTO> getAllUsers();
     UserResponseDTO getUserById(Long id);
     UserResponseDTO updateUser(Long id, UserRequestDTO userDTO);
-    void deleteUser(Long id);
+
 }
 

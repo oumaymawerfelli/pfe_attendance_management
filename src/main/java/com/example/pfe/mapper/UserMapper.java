@@ -1,3 +1,4 @@
+// UserMapper.java - VERSION CORRIGÉE
 package com.example.pfe.mapper;
 
 import com.example.pfe.dto.RegisterRequestDTO;
@@ -5,6 +6,8 @@ import com.example.pfe.dto.UserRequestDTO;
 import com.example.pfe.dto.UserResponseDTO;
 import com.example.pfe.entities.User;
 import org.springframework.stereotype.Component;
+
+import java.util.stream.Collectors;
 
 @Component
 public class UserMapper {
@@ -36,7 +39,6 @@ public class UserMapper {
                 .build();
     }
 
-    // Add this method for RegisterRequestDTO
     public User toEntity(RegisterRequestDTO dto) {
         return User.builder()
                 .firstName(dto.getFirstName())
@@ -64,7 +66,6 @@ public class UserMapper {
                 .build();
     }
 
-    // Ajoutez cette méthode pour mettre à jour une entité existante
     public void updateEntityFromDTO(UserRequestDTO dto, User user) {
         if (dto.getFirstName() != null) user.setFirstName(dto.getFirstName());
         if (dto.getLastName() != null) user.setLastName(dto.getLastName());
@@ -87,10 +88,8 @@ public class UserMapper {
         if (dto.getActive() != null) user.setActive(dto.getActive());
         if (dto.getSocialSecurityNumber() != null) user.setSocialSecurityNumber(dto.getSocialSecurityNumber());
         if (dto.getChildrenCount() != null) user.setChildrenCount(dto.getChildrenCount());
-        // Note: Email ne devrait pas être modifiable
     }
 
-    // Optional method to update from RegisterRequestDTO
     public void updateEntityFromRegister(RegisterRequestDTO dto, User user) {
         if (dto.getFirstName() != null) user.setFirstName(dto.getFirstName());
         if (dto.getLastName() != null) user.setLastName(dto.getLastName());
@@ -113,10 +112,11 @@ public class UserMapper {
         if (dto.getActive() != null) user.setActive(dto.getActive());
         if (dto.getSocialSecurityNumber() != null) user.setSocialSecurityNumber(dto.getSocialSecurityNumber());
         if (dto.getChildrenCount() != null) user.setChildrenCount(dto.getChildrenCount());
-        // Note: Email ne devrait pas être modifiable
     }
 
     public UserResponseDTO toResponseDTO(User user) {
+        if (user == null) return null;
+
         return UserResponseDTO.builder()
                 .id(user.getId())
                 .firstName(user.getFirstName())
@@ -146,6 +146,12 @@ public class UserMapper {
                 .directManagerId(user.getDirectManager() != null ?
                         user.getDirectManager().getId() : null)
                 .childrenCount(user.getChildrenCount())
+
+                .roles(user.getRoles() != null ?
+                        user.getRoles().stream()
+                                .map(role -> "ROLE_" + role.getName().name())
+                                .collect(Collectors.toList())
+                        : null)
                 .build();
     }
 }

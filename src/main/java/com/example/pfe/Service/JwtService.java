@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class JwtService {
 
-    @Value("${jwt.secret:defaultsecretchangeme}")
+    @Value("${app.jwt.secret:defaultsecretchangeme}")
     private String secret;
 
     @Value("${jwt.clock-skew-seconds:60}")

@@ -68,5 +68,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
 
     long countByDepartment(Department department);
+    Optional<User> findByEmailIgnoreCase(String email);
+
+
 
 }

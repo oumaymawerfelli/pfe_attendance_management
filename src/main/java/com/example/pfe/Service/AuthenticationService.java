@@ -256,10 +256,8 @@ public class AuthenticationService {
     // ==================== PRIVATE HELPER METHODS ====================
 
     private User validateCredentials(LoginRequestDTO request) {
-        User user = userRepository.findByUsernameOrEmail(
-                        request.getUsername(),
-                        request.getUsername()
-                )
+        // Now using email only (case-insensitive)
+        User user = userRepository.findByEmailIgnoreCase(request.getEmail())
                 .orElseThrow(() -> new BusinessException("Invalid credentials"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {

@@ -20,7 +20,9 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -165,5 +167,47 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("message", e.getMessage()));
         }
+    }
+
+
+    @GetMapping("/me/menu")
+    public ResponseEntity<List<Map<String, Object>>> getUserMenu(
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        log.info("🔍 GET /api/me/menu appelé par: {}", userDetails.getUsername());
+
+        // Générer le menu basé sur les rôles de l'utilisateur
+        List<Map<String, Object>> menu = new ArrayList<>();
+
+        // Dashboard - accessible à tous
+        menu.add(Map.of(
+                "text", "Dashboard",
+                "link", "/dashboard",
+                "icon", "dashboard"
+        ));
+
+        // Profile - accessible à tous
+        menu.add(Map.of(
+                "text", "Profile",
+                "link", "/profile",
+                "icon", "person"
+        ));
+
+        // Si l'utilisateur a le rôle GENERAL_MANAGER
+        if (userDetails.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_GENERAL_MANAGER"))) {
+            menu.add(Map.of(
+                    "text", "Employees",
+                    "link", "/employees",
+                    "icon", "people"
+            ));
+            menu.add(Map.of(
+                    "text", "Projects",
+                    "link", "/projects",
+                    "icon", "assignment"
+            ));
+        }
+
+        return ResponseEntity.ok(menu);
     }
 }

@@ -116,19 +116,7 @@ public class UserService {
                 .map(userMapper::toResponseDTO);
     }
 
-    /**
-     * Supprimer un utilisateur (soft delete)
-     */
-    public void deleteUser(Long id) {
-        log.info("Deleting user ID: {}", id);
-        User user = getUserEntityById(id);
 
-        user.setActive(false);
-        user.setEnabled(false);
-        userRepository.save(user);
-
-        log.info("User deactivated: {} (ID: {})", user.getEmail(), user.getId());
-    }
 
     // ==================== BUSINESS OPERATIONS ====================
 
