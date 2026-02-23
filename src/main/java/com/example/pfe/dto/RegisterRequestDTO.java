@@ -90,6 +90,7 @@ public class RegisterRequestDTO {
 
     @Min(value = 0, message = "Number of children cannot be negative")
     private Integer childrenCount;
+    private String description;
 
     // Registration-specific fields
     private List<Long> roleIds; // Role IDs to assign

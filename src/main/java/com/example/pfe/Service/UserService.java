@@ -2,6 +2,7 @@ package com.example.pfe.Service;
 
 import com.example.pfe.dto.UserRequestDTO;
 import com.example.pfe.dto.UserResponseDTO;
+import com.example.pfe.dto.UserStatsDTO;
 import com.example.pfe.entities.Role;
 import com.example.pfe.entities.User;
 import com.example.pfe.enums.RoleName;
@@ -199,19 +200,18 @@ public class UserService {
 
     private User buildUserEntity(UserRequestDTO dto, String tempPassword) {
         User user = userMapper.toEntity(dto);
-
-        // Use professional email as username
         user.setUsername(dto.getEmail());
         user.setPasswordHash(passwordEncoder.encode(tempPassword));
-        user.setEnabled(false);
+        user.setEnabled(false);           // Not registered yet
+        user.setActive(false);            // ← CHANGED: was true, now false (no login until approved)
         user.setFirstLogin(true);
-        user.setActive(true);
         user.setAccountNonExpired(true);
         user.setAccountNonLocked(true);
         user.setCredentialsNonExpired(true);
-
+        user.setRegistrationPending(true);
         return user;
     }
+
 
     private void assignRoles(User user, UserRequestDTO dto) {
         List<Role> roles = new ArrayList<>();
@@ -285,4 +285,178 @@ public class UserService {
         return !Objects.equals(existingUser.getDepartment(), newData.getDepartment()) ||
                 !Objects.equals(existingUser.getJobTitle(), newData.getJobTitle());
     }
+
+
+
+    // File: src/main/java/com/example/pfe/Service/UserService.java
+// Add these methods
+
+    // ==================== STATUS MANAGEMENT METHODS ====================
+
+    /**
+     * Disable a user
+     */
+    public void disableUser(Long id) {
+        log.info("Disabling user ID: {}", id);
+        User user = getUserEntityById(id);
+
+        if (!user.getActive()) {
+            throw new BusinessException("User is already disabled");
+        }
+        // ← Only touch active, never enabled
+        user.setActive(false);
+        userRepository.save(user);
+
+        try {
+            emailService.sendAccountDisabledEmail(user.getEmail(),
+                    user.getFirstName() + " " + user.getLastName());
+        } catch (Exception e) {
+            log.error("Failed to send disable email: {}", e.getMessage());
+        }
+        log.info("User disabled successfully: {}", user.getEmail());
+    }
+    /**
+     * Approve a pending user (for registration approval)
+     */
+    public void approveUser(Long id) {
+        log.info("Approving user ID: {}", id);
+        User user = getUserEntityById(id);
+
+        if (user.isEnabled()) {
+            throw new BusinessException("User is already approved");
+        }
+        // ← Both flags set on approval
+        user.setEnabled(true);            // Marks registration as complete
+        user.setActive(true);             // Grants login access
+        user.setRegistrationPending(false);
+        user.setAccountNonLocked(true);
+        user.setActivationToken(null);
+        user.setActivationTokenExpiry(null);
+        userRepository.save(user);
+
+        try {
+            emailService.sendAccountApprovedEmail(user.getEmail(),
+                    user.getFirstName() + " " + user.getLastName());
+        } catch (Exception e) {
+            log.error("Failed to send approval email: {}", e.getMessage());
+        }
+        log.info("User approved successfully: {}", user.getEmail());
+    }
+
+    /**
+     * Reject a pending user
+     */
+    public void rejectUser(Long id) {
+        log.info("Rejecting user ID: {}", id);
+
+        User user = getUserEntityById(id);
+
+        if (user.isEnabled()) {
+            throw new BusinessException("Cannot reject an approved user");
+        }
+
+        // Delete the user (or you could mark them as rejected)
+        userRepository.delete(user);
+
+        log.info("User rejected successfully: {}", user.getEmail());
+    }
+
+    /**
+     * Get user statistics
+     */
+    public UserStatsDTO getUserStats() {
+        return UserStatsDTO.builder()
+                .pending(userRepository.countPendingUsers())     // registrationPending=true
+                .active(userRepository.countActiveUsers())       // active=true AND enabled=true
+                .disabled(userRepository.countDisabledUsers())   // enabled=true BUT active=false
+                .locked(userRepository.countLockedUsers())       // accountNonLocked=false
+                .total(userRepository.count())
+                .build();
+    }
+    /**
+     * Get users by status with pagination
+     */
+    public Page<UserResponseDTO> getUsersByStatus(String status, Pageable pageable) {
+        log.info("Getting users by status: {}", status);
+
+        Page<User> usersPage = userRepository.findByStatus(status, pageable);
+        return usersPage.map(userMapper::toResponseDTO);
+    }
+    /**
+     * Fix all users to have correct status flags
+
+    @Transactional
+    public void fixAllUserStatus() {
+        List<User> users = userRepository.findAll();
+        for (User user : users) {
+            // Set accountNonLocked to true for all normal users
+            user.setAccountNonLocked(true);
+
+            // If user is approved, set these
+            if (user.isEnabled()) {
+                user.setActive(true);
+                user.setRegistrationPending(false);
+            }
+
+            log.info("Fixed user: {} - accountNonLocked={}, active={}, enabled={}, registrationPending={}",
+                    user.getEmail(), user.isAccountNonLocked(), user.getActive(), user.isEnabled(), user.isRegistrationPending());
+        }
+        userRepository.saveAll(users);
+    }*/
+
+    public void enableUser(Long id) {
+        log.info("Enabling user ID: {}", id);
+        User user = getUserEntityById(id);
+
+        if (!user.isEnabled()) {
+            // enabled=false means they were never approved — they can't be re-enabled this way
+            throw new BusinessException("User has not completed registration. Use approve instead.");
+        }
+        if (user.getActive()) {
+            throw new BusinessException("User is already active");
+        }
+        // ← Only restore active, registration (enabled) stays untouched
+        user.setActive(true);
+        userRepository.save(user);
+        log.info("User re-enabled successfully: {}", user.getEmail());
+    }
+
+
+
+
+
+    @Transactional
+    public void fixAllUserStatus() {
+        List<User> users = userRepository.findAll();
+        for (User user : users) {
+            user.setAccountNonLocked(true); // ← Fix the root cause of "Locked"
+
+            if (user.isEnabled()) {
+                // Already approved users
+                user.setActive(true);
+                user.setRegistrationPending(false);
+            } else {
+                // Never approved — set as pending
+                user.setActive(false);
+                user.setRegistrationPending(true);
+            }
+        }
+        userRepository.saveAll(users);
+        log.info("Fixed {} users", users.size());
+    }
+    /**
+     * Rechercher des utilisateurs avec pagination
+     */
+    @Transactional(readOnly = true)
+    public Page<UserResponseDTO> searchUsers(String keyword, Pageable pageable) {
+        log.info("Searching users with keyword: {}", keyword);
+
+        if (keyword == null || keyword.trim().isEmpty()) {
+            return getAllUsers(pageable);
+        }
+
+        Page<User> usersPage = userRepository.searchByKeyword(keyword.trim(), pageable);
+        return usersPage.map(userMapper::toResponseDTO);
+    }
+
 }

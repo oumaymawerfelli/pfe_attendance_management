@@ -93,4 +93,7 @@ public class UserRequestDTO {
 
     @Min(value = 0, message = "Number of children cannot be negative")
     private Integer childrenCount;
+
+    @Size(max = 500, message = "Description cannot exceed 500 characters")
+    private String description;
 }

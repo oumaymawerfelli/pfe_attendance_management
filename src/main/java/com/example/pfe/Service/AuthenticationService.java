@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -156,8 +157,16 @@ public class AuthenticationService {
     public JwtResponseDTO authenticate(LoginRequestDTO request) {
 
         User user = validateCredentials(request);
-
         checkAccountStatus(user);
+
+        // ✅ METTRE À JOUR lastLogin avec la date du jour
+        user.setLastLogin(LocalDate.now());
+
+        // ✅ Sauvegarder les modifications dans la base de données
+        user = userRepository.save(user);
+
+        log.info("✅ User {} logged in. Last login updated to {}",
+                user.getEmail(), user.getLastLogin());
 
         String accessToken = jwtService.generateAccessToken(user);
 
@@ -168,8 +177,6 @@ public class AuthenticationService {
                 .message("Login successful")
                 .user(userMapper.toResponseDTO(user))
                 .build();
-
-
 
         return response;
     }

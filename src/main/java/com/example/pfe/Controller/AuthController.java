@@ -28,6 +28,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/auth")
+@CrossOrigin(origins = "http://localhost:4200", allowCredentials = "true")
 @RequiredArgsConstructor
 @Validated
 

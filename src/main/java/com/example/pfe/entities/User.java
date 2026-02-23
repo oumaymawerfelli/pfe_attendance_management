@@ -141,17 +141,18 @@ public class User {
    @Builder.Default
    public Boolean active = true;
 
-   /**
-    * Indicates that this user was self-registered and is waiting
-    * for an administrator / general manager approval before the
-    * activation email is sent.
-    */
+
    @Builder.Default
    private boolean registrationPending = false;
 
    @Column(columnDefinition = "TEXT")  // TEXT has unlimited length
    private String activationToken;
    private LocalDateTime activationTokenExpiry;
+
+
+   @Column(columnDefinition = "TEXT")
+   private String description;
+
 
    // Méthode pour Spring Security
    public Collection<? extends GrantedAuthority> getAuthorities() {

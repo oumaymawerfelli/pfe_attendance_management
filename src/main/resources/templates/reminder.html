@@ -2,24 +2,84 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="UTF-8">
-  <title>Rappel d'activation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rappel d'activation - ArabSoft</title>
 </head>
-<body style="font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f5f5;">
-<div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+<body style="font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); line-height: 1.5;">
+<div style="max-width: 600px; margin: 30px auto; background: #ffffff; border-radius: 24px; box-shadow: 0 30px 60px rgba(0,0,0,0.3); overflow: hidden;">
 
-  <div style="background-color: #1100ff; padding: 24px; border-radius: 8px 8px 0 0;">
-    <h1 style="color: white; margin: 0; font-size: 24px;">Rappel d'activation</h1>
+  <!-- Hero Section with Matching Gradient -->
+  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 48px 30px; text-align: center;">
+    <!-- Logo Container with Premium Effects -->
+    <div style="margin-bottom: 25px; position: relative;">
+      <div style="width: 140px; height: 140px; margin: 0 auto; background: rgba(255,255,255,0.15); border-radius: 50%; padding: 10px; backdrop-filter: blur(10px); box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
+        <!-- ONLY THE LOGO - NO FALLBACK DIV -->
+        <img src="cid:logo" alt="ArabSoft Logo" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.3);">
+      </div>
+    </div>
+    <h1 style="color: white; margin: 20px 0 10px; font-size: 36px; font-weight: 700; letter-spacing: -0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">Rappel d'activation</h1>
+    <p style="color: rgba(255,255,255,0.95); margin: 0; font-size: 18px; font-weight: 300;">Votre compte attend votre activation</p>
+  </div>
   </div>
 
-  <div style="padding: 32px;">
-    <p style="color: #666; line-height: 1.6;">Nous avons constaté que vous n'avez pas encore activé votre compte.</p>
+  <!-- Main Content -->
+  <div style="padding: 48px 40px;">
+    <!-- Gentle Reminder -->
+    <div style="margin-bottom: 30px; border-left: 4px solid #667eea; padding-left: 20px;">
+      <h2 style="color: #2d3748; margin: 0 0 8px; font-size: 28px; font-weight: 600;">Vous n'avez pas encore activé votre compte</h2>
+      <p style="color: #718096; font-size: 16px; margin: 15px 0 0; line-height: 1.6;">
+        Nous avons constaté que vous n'avez pas encore activé votre compte sur ArabSoft.
+        Pour profiter pleinement de nos services, veuillez activer votre compte dès maintenant.
+      </p>
+    </div>
 
-    <div style="text-align: center; margin: 30px 0;">
-      <a th:href="${activationLink}"
-         style="display: inline-block; background-color: #000dff; color: white; text-decoration: none; padding: 12px 30px; border-radius: 4px; font-weight: 500;">
-        Activer mon compte maintenant
+    <!-- Info Card with Premium Design -->
+    <div style="background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%); padding: 35px; border-radius: 20px; margin: 30px 0; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+      <div style="display: flex; align-items: center;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); width: 64px; height: 64px; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin-right: 20px; box-shadow: 0 10px 15px rgba(102,126,234,0.3);">
+          <span style="color: white; font-size: 28px;">⏳</span>
+        </div>
+        <div>
+          <p style="margin: 0; color: #718096; font-size: 14px; font-weight: 500;">Ce lien d'activation expirera dans</p>
+          <p style="margin: 5px 0 0; color: #2d3748; font-size: 24px; font-weight: 700;">
+            <span style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">7 jours</span>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Premium CTA Button -->
+    <div style="text-align: center; margin: 40px 0;">
+      <a th:href="${activationLink}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 18px 48px; border-radius: 50px; font-weight: 600; font-size: 18px; box-shadow: 0 20px 30px rgba(102,126,234,0.4); transition: all 0.3s ease; border: 1px solid rgba(255,255,255,0.2); text-transform: uppercase; letter-spacing: 1px;">
+        ⚡ Activer mon compte maintenant
       </a>
     </div>
+
+    <!-- Help Text with Premium Style -->
+    <div style="background: linear-gradient(135deg, #ebf4ff 0%, #c3dafe 100%); border-radius: 16px; padding: 25px; text-align: center; margin-top: 30px;">
+      <p style="color: #2d3748; margin: 0; font-size: 16px; font-weight: 500;">
+        <span style="font-size: 24px; margin-right: 10px;">❓</span>
+        Besoin d'aide ? Contactez notre support à
+        <a href="mailto:support@arabsoft.com" style="color: #667eea; text-decoration: none; font-weight: 700;">support@arabsoft.com</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Premium Footer (matching welcome template) -->
+  <div style="background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); padding: 40px 40px;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+      <tr>
+        <td style="text-align: left; color: #a0aec0; font-size: 14px;">
+          <p style="margin: 0 0 8px; font-weight: 500;">© <span th:text="${currentYear}">2026</span> ArabSoft Attendance Management</p>
+          <p style="margin: 0;">Tous droits réservés</p>
+        </td>
+        <td style="text-align: right;">
+          <a href="#" style="color: #a0aec0; text-decoration: none; margin-left: 20px; font-size: 14px;">Aide</a>
+          <a href="#" style="color: #a0aec0; text-decoration: none; margin-left: 20px; font-size: 14px;">Contact</a>
+          <a href="#" style="color: #a0aec0; text-decoration: none; margin-left: 20px; font-size: 14px;">Confidentialité</a>
+        </td>
+      </tr>
+    </table>
   </div>
 </div>
 </body>

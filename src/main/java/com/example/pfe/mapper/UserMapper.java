@@ -1,10 +1,12 @@
-// UserMapper.java - VERSION CORRIGÉE
+// src/main/java/com/example/pfe/mapper/UserMapper.java
+
 package com.example.pfe.mapper;
 
 import com.example.pfe.dto.RegisterRequestDTO;
 import com.example.pfe.dto.UserRequestDTO;
 import com.example.pfe.dto.UserResponseDTO;
 import com.example.pfe.entities.User;
+
 import org.springframework.stereotype.Component;
 
 import java.util.stream.Collectors;
@@ -36,6 +38,8 @@ public class UserMapper {
                 .active(dto.getActive() != null ? dto.getActive() : true)
                 .socialSecurityNumber(dto.getSocialSecurityNumber())
                 .childrenCount(dto.getChildrenCount() != null ? dto.getChildrenCount() : 0)
+                // NEW: Add description
+                .description(dto.getDescription())
                 .build();
     }
 
@@ -63,6 +67,8 @@ public class UserMapper {
                 .active(dto.getActive() != null ? dto.getActive() : true)
                 .socialSecurityNumber(dto.getSocialSecurityNumber())
                 .childrenCount(dto.getChildrenCount() != null ? dto.getChildrenCount() : 0)
+                // NEW: Add description (might be null for registration)
+                .description(dto.getDescription())
                 .build();
     }
 
@@ -88,6 +94,8 @@ public class UserMapper {
         if (dto.getActive() != null) user.setActive(dto.getActive());
         if (dto.getSocialSecurityNumber() != null) user.setSocialSecurityNumber(dto.getSocialSecurityNumber());
         if (dto.getChildrenCount() != null) user.setChildrenCount(dto.getChildrenCount());
+        // NEW: Update description
+        if (dto.getDescription() != null) user.setDescription(dto.getDescription());
     }
 
     public void updateEntityFromRegister(RegisterRequestDTO dto, User user) {
@@ -112,6 +120,8 @@ public class UserMapper {
         if (dto.getActive() != null) user.setActive(dto.getActive());
         if (dto.getSocialSecurityNumber() != null) user.setSocialSecurityNumber(dto.getSocialSecurityNumber());
         if (dto.getChildrenCount() != null) user.setChildrenCount(dto.getChildrenCount());
+        // NEW: Update description (if present)
+        if (dto.getDescription() != null) user.setDescription(dto.getDescription());
     }
 
     public UserResponseDTO toResponseDTO(User user) {
@@ -146,12 +156,18 @@ public class UserMapper {
                 .directManagerId(user.getDirectManager() != null ?
                         user.getDirectManager().getId() : null)
                 .childrenCount(user.getChildrenCount())
-
+                .description(user.getDescription())
                 .roles(user.getRoles() != null ?
                         user.getRoles().stream()
                                 .map(role -> "ROLE_" + role.getName().name())
                                 .collect(Collectors.toList())
                         : null)
+                .enabled(user.isEnabled())
+                .registrationPending(user.isRegistrationPending())
+                .accountNonLocked(user.isAccountNonLocked())
+
+                .lastLogin(user.getLastLogin() != null ?
+                        user.getLastLogin().atStartOfDay() : null)
+                .username(user.getUsername())
                 .build();
-    }
-}
+    }}

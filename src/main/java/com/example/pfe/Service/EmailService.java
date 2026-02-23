@@ -5,6 +5,7 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -13,6 +14,7 @@ import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 import java.time.LocalDateTime;
+import java.time.Year;
 
 @Service
 @RequiredArgsConstructor
@@ -31,9 +33,15 @@ public class EmailService {
     @Value("${app.email.simulated:false}")
     private boolean simulated;
 
+    // src/main/java/com/example/pfe/Service/EmailService.java
+
     @Async
     public void sendWelcomeEmail(String toEmail, String fullName,
                                  String defaultPassword, String activationToken) {
+
+        String activationLink = frontendUrl + "/#/auth/activate?token=" + activationToken;
+        System.out.println("🔗 ACTIVATION LINK BEING SENT: " + activationLink);
+
         if (simulated) {
             logSimulatedEmail("WELCOME", toEmail,
                     String.format("FullName: %s, Password: %s, Token: %s",
@@ -47,14 +55,32 @@ public class EmailService {
 
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Bienvenue sur l'application PFE");
+            helper.setSubject("🎉 Bienvenue sur ArabSoft - Activez votre compte");
+
+            // ✅ CORRIGÉ: Utiliser le même chemin partout
+            try {
+                // Essayer d'abord avec .jpg (comme dans reminder)
+                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.jpg");
+                helper.addInline("logo", logoResource);
+                log.info("✅ Logo embedded successfully");
+            } catch (Exception e) {
+                // Fallback: essayer avec .webp
+                try {
+                    ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
+                    helper.addInline("logo", logoResource);
+                    log.info("✅ Logo embedded with .webp format");
+                } catch (Exception ex) {
+                    log.warn("⚠️ Logo not found at any path");
+                }
+            }
 
             Context context = new Context();
             context.setVariable("fullName", fullName);
             context.setVariable("toEmail", toEmail);
             context.setVariable("defaultPassword", defaultPassword);
             context.setVariable("activationToken", activationToken);
-            context.setVariable("activationLink", frontendUrl + "/auth/activate?token=" + activationToken);
+            context.setVariable("activationLink", activationLink);
+            context.setVariable("currentYear", Year.now().getValue());
 
             String htmlContent = templateEngine.process("welcome", context);
             helper.setText(htmlContent, true);
@@ -64,7 +90,6 @@ public class EmailService {
 
         } catch (MessagingException e) {
             log.error("❌ Failed to send welcome email to {}: {}", toEmail, e.getMessage());
-            // Fallback: log the information
             logFallback("WELCOME", toEmail, fullName, defaultPassword, activationToken);
         }
     }
@@ -82,12 +107,28 @@ public class EmailService {
 
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Rappel : Activez votre compte PFE");
+            helper.setSubject("⏰ Rappel : Activez votre compte ArabSoft");
+
+            // ✅ CORRIGÉ: Même logique que dans welcome
+            try {
+                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.jpg");
+                helper.addInline("logo", logoResource);
+                log.info("✅ Logo embedded successfully");
+            } catch (Exception e) {
+                try {
+                    ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
+                    helper.addInline("logo", logoResource);
+                    log.info("✅ Logo embedded with .webp format");
+                } catch (Exception ex) {
+                    log.warn("⚠️ Logo not found at any path");
+                }
+            }
 
             Context context = new Context();
             context.setVariable("toEmail", toEmail);
             context.setVariable("activationToken", activationToken);
-            context.setVariable("activationLink", frontendUrl + "/auth/activate?token=" + activationToken);
+            context.setVariable("activationLink", frontendUrl + "/#/auth/activate?token=" + activationToken);
+            context.setVariable("currentYear", LocalDateTime.now().getYear());
 
             String htmlContent = templateEngine.process("reminder", context);
             helper.setText(htmlContent, true);
@@ -95,12 +136,10 @@ public class EmailService {
             mailSender.send(message);
             log.info("✅ Activation reminder sent to: {}", toEmail);
 
-        } catch (MessagingException e) {
-            log.error("❌ Failed to send reminder to {}: {}", toEmail, e.getMessage());
-            log.info("🔷 FALLBACK - Reminder for {} with token: {}", toEmail, activationToken);
+        } catch (Exception e) {
+            log.error("❌ Failed to send reminder: {}", e.getMessage());
         }
     }
-
     @Async
     public void sendPasswordResetEmail(String toEmail, String fullName, String newPassword) {
         if (simulated) {
@@ -115,12 +154,28 @@ public class EmailService {
 
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Réinitialisation de votre mot de passe");
+            helper.setSubject("🔐 Réinitialisation de votre mot de passe");
+
+            // ✅ CORRIGÉ: Utiliser la même logique que welcome et reminder
+            try {
+                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.jpg");
+                helper.addInline("logo", logoResource);
+                log.info("✅ Logo embedded successfully");
+            } catch (Exception e) {
+                try {
+                    ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
+                    helper.addInline("logo", logoResource);
+                    log.info("✅ Logo embedded with .webp format");
+                } catch (Exception ex) {
+                    log.warn("⚠️ Logo not found at any path");
+                }
+            }
 
             Context context = new Context();
             context.setVariable("fullName", fullName);
             context.setVariable("newPassword", newPassword);
-            context.setVariable("loginLink", frontendUrl + "/login");
+            context.setVariable("loginLink", frontendUrl + "/#/login");
+            context.setVariable("currentYear", Year.now().getValue());
 
             String htmlContent = templateEngine.process("password-reset", context);
             helper.setText(htmlContent, true);
@@ -132,50 +187,6 @@ public class EmailService {
             log.error("❌ Failed to send password reset to {}: {}", toEmail, e.getMessage());
             log.info("🔷 FALLBACK - New password for {}: {}", toEmail, newPassword);
         }
-    }
-
-    @Async
-    public void sendSimpleEmail(String toEmail, String subject, String body) {
-        if (simulated) {
-            logSimulatedEmail("SIMPLE", toEmail, String.format("Subject: %s, Body: %s", subject, body));
-            return;
-        }
-
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject(subject);
-            helper.setText(body, false);
-
-            mailSender.send(message);
-            log.info("✅ Simple email sent to: {}", toEmail);
-
-        } catch (MessagingException e) {
-            log.error("❌ Failed to send simple email to {}: {}", toEmail, e.getMessage());
-        }
-    }
-
-    // ========== MÉTHODES PRIVÉES ==========
-
-    private void logSimulatedEmail(String type, String to, String details) {
-        log.info("\n🔷 === SIMULATED EMAIL - {} ===", type);
-        log.info("To: {}", to);
-        log.info("Details: {}", details);
-        log.info("🔷 ============================\n");
-    }
-
-    private void logFallback(String type, String toEmail, String fullName,
-                             String defaultPassword, String activationToken) {
-        log.info("\n🔷 === FALLBACK - {} ===", type);
-        log.info("To: {}", toEmail);
-        log.info("Full Name: {}", fullName);
-        log.info("Password: {}", defaultPassword);
-        log.info("Token: {}", activationToken);
-        log.info("Link: {}/auth/activate?token={}", frontendUrl, activationToken);
-        log.info("🔷 =====================\n");
     }
     @Async
     public void sendProjectAssignmentEmail(String toEmail, String fullName,
@@ -198,7 +209,15 @@ public class EmailService {
 
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Vous avez été assigné au projet : " + projectName);
+            helper.setSubject("📋 Vous avez été assigné au projet : " + projectName);
+
+            // Try to embed logo (fails gracefully if logo doesn't exist)
+            try {
+                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
+                helper.addInline("logo", logoResource);
+            } catch (Exception e) {
+                log.warn("⚠️ Logo not found, sending email without logo: {}", e.getMessage());
+            }
 
             Context context = new Context();
             context.setVariable("fullName", fullName);
@@ -206,6 +225,7 @@ public class EmailService {
             context.setVariable("projectDescription", projectDescription);
             context.setVariable("assignmentNotes", assignmentNotes);
             context.setVariable("assignmentDate", LocalDateTime.now());
+            context.setVariable("currentYear", Year.now().getValue());
 
             String htmlContent = templateEngine.process("project-assignment-email", context);
             helper.setText(htmlContent, true);
@@ -215,13 +235,13 @@ public class EmailService {
 
         } catch (MessagingException e) {
             log.error("❌ Error sending project assignment email: {}", e.getMessage());
-            // Fallback
             log.info("\n🔷 === FALLBACK - PROJECT ASSIGNMENT ===");
             log.info("To: {}", toEmail);
             log.info("Project: {}", projectName);
             log.info("🔷 ====================================\n");
         }
     }
+
     @Async
     public void sendProjectUnassignmentEmail(String toEmail, String recipientName,
                                              String projectName) {
@@ -240,12 +260,21 @@ public class EmailService {
 
             helper.setFrom(fromEmail);
             helper.setTo(toEmail);
-            helper.setSubject("Désaffectation du projet : " + projectName);
+            helper.setSubject("📤 Désaffectation du projet : " + projectName);
+
+            // Try to embed logo (fails gracefully if logo doesn't exist)
+            try {
+                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
+                helper.addInline("logo", logoResource);
+            } catch (Exception e) {
+                log.warn("⚠️ Logo not found, sending email without logo: {}", e.getMessage());
+            }
 
             Context context = new Context();
             context.setVariable("recipientName", recipientName);
             context.setVariable("projectName", projectName);
             context.setVariable("unassignmentDate", LocalDateTime.now());
+            context.setVariable("currentYear", Year.now().getValue());
 
             String htmlContent = templateEngine.process("project-unassignment-email", context);
             helper.setText(htmlContent, true);
@@ -255,11 +284,81 @@ public class EmailService {
 
         } catch (MessagingException e) {
             log.error("❌ Error sending unassignment email: {}", e.getMessage());
-            // Fallback
             log.info("\n🔷 === FALLBACK - PROJECT UNASSIGNMENT ===");
             log.info("To: {}", toEmail);
             log.info("Project: {}", projectName);
             log.info("🔷 ======================================\n");
         }
+    }
+
+    private void sendEmail(String to, String subject, String htmlBody) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true);
+            mailSender.send(message);
+            log.info("✅ Email sent to: {}", to);
+        } catch (MessagingException e) {
+            log.error("❌ Failed to send email to {}: {}", to, e.getMessage());
+        }
+    }
+
+    public void sendAccountDisabledEmail(String to, String fullName) {
+        String subject = "⚠️ Account Disabled";
+        String body = String.format(
+                "<h2>Hello %s,</h2>" +
+                        "<p>Your account has been disabled by an administrator.</p>" +
+                        "<p>If you believe this is an error, please contact your system administrator.</p>" +
+                        "<br><p>Best regards,<br>HR Management Team</p>",
+                fullName
+        );
+        sendEmail(to, subject, body);
+    }
+
+    public void sendAccountApprovedEmail(String to, String fullName) {
+        String subject = "✅ Account Approved";
+        String body = String.format(
+                "<h2>Welcome %s!</h2>" +
+                        "<p>Your account has been approved. You can now log in to the system.</p>" +
+                        "<p><a href='%s/login'>Click here to login</a></p>" +
+                        "<br><p>Best regards,<br>HR Management Team</p>",
+                fullName, frontendUrl
+        );
+        sendEmail(to, subject, body);
+    }
+
+    public void sendAccountRejectedEmail(String to, String fullName) {
+        String subject = "❌ Registration Update";
+        String body = String.format(
+                "<h2>Hello %s,</h2>" +
+                        "<p>We regret to inform you that your registration request has been rejected.</p>" +
+                        "<p>Please contact HR for more information.</p>" +
+                        "<br><p>Best regards,<br>HR Management Team</p>",
+                fullName
+        );
+        sendEmail(to, subject, body);
+    }
+
+    // ========== MÉTHODES PRIVÉES ==========
+
+    private void logSimulatedEmail(String type, String to, String details) {
+        log.info("\n🔷 === SIMULATED EMAIL - {} ===", type);
+        log.info("To: {}", to);
+        log.info("Details: {}", details);
+        log.info("🔷 ============================\n");
+    }
+
+    private void logFallback(String type, String toEmail, String fullName,
+                             String defaultPassword, String activationToken) {
+        log.info("\n🔷 === FALLBACK - {} ===", type);
+        log.info("To: {}", toEmail);
+        log.info("Full Name: {}", fullName);
+        log.info("Password: {}", defaultPassword);
+        log.info("Token: {}", activationToken);
+        log.info("Link: {}/auth/activate?token={}", frontendUrl, activationToken);
+        log.info("🔷 =====================\n");
     }
 }

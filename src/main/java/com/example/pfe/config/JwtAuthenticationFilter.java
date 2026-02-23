@@ -1,6 +1,8 @@
+// src/main/java/com/example/pfe/config/JwtAuthenticationFilter.java
 package com.example.pfe.config;
 
 import com.example.pfe.Service.JwtService;
+import com.example.pfe.Service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,7 +17,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import com.example.pfe.Service.TokenBlacklistService;
+
 import java.io.IOException;
 
 @Component
@@ -26,6 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
     private final TokenBlacklistService blacklistService;
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
@@ -42,11 +45,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || path.startsWith("/api/auth/activate")
                 || path.startsWith("/api/auth/resend-activation")
                 || path.startsWith("/api/auth/validate-activation-token")
-                || path.startsWith("/auth/login")           // Add these without /api
-                || path.startsWith("/auth/register")        // Add these without /api
-                || path.startsWith("/auth/activate")        // Add these without /api
-                || path.startsWith("/auth/resend-activation") // Add these without /api
-                || path.startsWith("/auth/validate-activation-token") // Add these without /api
+                || path.startsWith("/auth/login")
+                || path.startsWith("/auth/register")
+                || path.startsWith("/auth/activate")
+                || path.startsWith("/auth/resend-activation")
+                || path.startsWith("/auth/validate-activation-token")
                 || path.startsWith("/swagger-ui")
                 || path.startsWith("/v3/api-docs")
                 || path.startsWith("/api/debug");
@@ -60,7 +63,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     ) throws ServletException, IOException {
 
         String path = request.getServletPath();
-        log.debug("Processing request: {} {}", request.getMethod(), path);
+        String method = request.getMethod();
+
+        log.debug("Processing request: {} {}", method, path);
+
+        // Always allow OPTIONS requests (pre-flight CORS)
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            log.debug("Allowing OPTIONS request for: {}", path);
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         // Skip filter for public endpoints
         if (shouldNotFilter(request)) {
@@ -70,37 +82,65 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String authHeader = request.getHeader("Authorization");
+        log.debug("Auth header present: {}", authHeader != null);
 
-        // If no auth header for protected endpoint, continue (Spring Security will handle 403)
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.debug("No JWT token found for protected endpoint: {}", path);
+        if (authHeader == null) {
+            log.debug("No Authorization header found for protected endpoint: {}", path);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        log.debug("Auth header value: {}", authHeader);
+
+        if (!authHeader.startsWith("Bearer ")) {
+            log.debug("Auth header does not start with Bearer: {}", authHeader);
             filterChain.doFilter(request, response);
             return;
         }
 
         String jwt = authHeader.substring(7);
+        log.debug("Extracted JWT token length: {}", jwt.length());
+        log.debug("Token preview: {}...", jwt.substring(0, Math.min(20, jwt.length())));
 
-        // 🔴 NOUVEAU : Vérifier si le token est blacklisté
-        // Tu dois d'abord injecter le service
+        // Check if token is blacklisted
         if (blacklistService.isBlacklisted(jwt)) {
-            log.debug("Token blacklisté pour le chemin: {}", path);
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token révoqué");
+            log.debug("Token is blacklisted for path: {}", path);
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token revoked");
             return;
         }
 
-        if (!jwtService.isAccessToken(jwt) || !jwtService.isTokenValid(jwt)) {
-            log.debug("Invalid or expired token for path: {}", path);
+        // Check token validity
+        boolean isValid = jwtService.isTokenValid(jwt);
+        log.debug("Token valid basic check: {}", isValid);
+
+        if (!isValid) {
+            log.debug("Token is not valid: {}", path);
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // Check if it's an access token
+        boolean isAccessToken = jwtService.isAccessToken(jwt);
+        log.debug("Is access token: {}", isAccessToken);
+
+        if (!isAccessToken) {
+            log.debug("Token is not an access token for path: {}", path);
             filterChain.doFilter(request, response);
             return;
         }
 
         String userEmail = jwtService.extractUsername(jwt);
+        log.debug("Extracted username: {}", userEmail);
 
         if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
             UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
+            log.debug("Loaded user details for: {}", userEmail);
 
-            if (!jwtService.isTokenValid(jwt, userDetails)) {
+            boolean isValidForUser = jwtService.isTokenValid(jwt, userDetails);
+            log.debug("Token valid for user: {}", isValidForUser);
+
+            if (!isValidForUser) {
                 log.debug("Token validation failed for user: {}", userEmail);
                 filterChain.doFilter(request, response);
                 return;
@@ -119,8 +159,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            log.debug("Authenticated user {}", userEmail);
+            log.debug("✅ Authenticated user {}", userEmail);
         }
 
         filterChain.doFilter(request, response);
-    }}
+    }
+}

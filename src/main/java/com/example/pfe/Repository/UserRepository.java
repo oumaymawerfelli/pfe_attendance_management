@@ -3,6 +3,8 @@ package com.example.pfe.Repository;
 import com.example.pfe.entities.User;
 import com.example.pfe.enums.Department;
 import com.example.pfe.enums.RoleName;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -70,6 +72,30 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByDepartment(Department department);
     Optional<User> findByEmailIgnoreCase(String email);
 
+    @Query("SELECT COUNT(u) FROM User u WHERE u.enabled = false AND u.activationToken IS NOT NULL")
+    long countPendingUsers();
 
+    @Query("SELECT COUNT(u) FROM User u WHERE u.enabled = true AND u.active = true AND u.accountNonLocked = true")
+    long countActiveUsers();
 
+    @Query("SELECT COUNT(u) FROM User u WHERE u.active = false AND u.enabled = false")
+    long countDisabledUsers();
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.accountNonLocked = false")
+    long countLockedUsers();
+
+    @Query("SELECT u FROM User u WHERE " +
+            "(:status IS NULL OR " +
+            "(:status = 'PENDING' AND u.enabled = false AND u.activationToken IS NOT NULL) OR " +
+            "(:status = 'ACTIVE' AND u.enabled = true AND u.active = true AND u.accountNonLocked = true) OR " +
+            "(:status = 'DISABLED' AND u.active = false AND u.enabled = false) OR " +
+            "(:status = 'LOCKED' AND u.accountNonLocked = false))")
+    Page<User> findByStatus(@Param("status") String status, Pageable pageable);
+    @Query("SELECT u FROM User u WHERE " +
+            "(:keyword IS NULL OR " +
+            "LOWER(u.firstName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(u.lastName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
+            "LOWER(u.department) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    Page<User> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
 }

@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -42,4 +43,12 @@ public class UserResponseDTO {
     private Long directManagerId;
     private Integer childrenCount;
     private List<String> roles;
+    private String description;
+    private boolean registrationPending;
+    private boolean enabled;
+    private LocalDateTime lastLogin;
+    private String username;
+    private LocalDateTime createdAt;
+
+    private boolean accountNonLocked;
 }
