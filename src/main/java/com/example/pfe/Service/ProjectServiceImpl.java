@@ -47,7 +47,7 @@ public class ProjectServiceImpl implements ProjectService {
             throw new BusinessException("End date cannot be before start date");
         }
 
-        // Generate project code - CE N'EST PAS DANS LE DTO
+        // Generate project code
         String projectCode = generateProjectCode(requestDTO.getName());
 
         // Check if code already exists
@@ -57,7 +57,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         // Map DTO to entity
         Project project = mapToEntity(requestDTO);
-        project.setCode(projectCode); // ← ICI on set le code
+        project.setCode(projectCode);
         project.setCreatedAt(LocalDateTime.now());
         project.setUpdatedAt(LocalDateTime.now());
 
@@ -141,7 +141,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ProjectResponseDTO> getAllProjects(Pageable pageable) { // AJOUTEZ LE PARAMÈTRE ICI
+    public Page<ProjectResponseDTO> getAllProjects(Pageable pageable) {
         log.debug("Fetching all projects with pageable: page={}, size={}, sort={}",
                 pageable.getPageNumber(), pageable.getPageSize(), pageable.getSort());
 
@@ -233,7 +233,7 @@ public class ProjectServiceImpl implements ProjectService {
     // ==================== TEAM MANAGEMENT ====================
 
     @Override
-    public TeamAssignment assignTeamMember(TeamAssignmentDTO assignmentDTO) {
+    public TeamAssignmentResponseDTO assignTeamMember(TeamAssignmentDTO assignmentDTO) {
         return teamAssignmentService.assignEmployeeToProject(assignmentDTO);
     }
 
@@ -248,6 +248,7 @@ public class ProjectServiceImpl implements ProjectService {
         List<TeamAssignment> team = teamAssignmentRepository.findByProjectId(projectId);
 
         return team.stream()
+                .filter(assignment -> Boolean.TRUE.equals(assignment.getActive()))
                 .map(assignment -> mapToTeamMemberDTO(assignment))
                 .collect(Collectors.toList());
     }
@@ -259,7 +260,11 @@ public class ProjectServiceImpl implements ProjectService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Employee not found: " + employeeId));
 
-        List<TeamAssignment> assignments = teamAssignmentRepository.findByEmployeeAndActiveTrue(employee);
+        // Utiliser findByEmployeeId avec filtrage manuel
+        List<TeamAssignment> assignments = teamAssignmentRepository.findByEmployeeId(employeeId)
+                .stream()
+                .filter(assignment -> Boolean.TRUE.equals(assignment.getActive()))
+                .collect(Collectors.toList());
 
         return assignments.stream()
                 .map(TeamAssignment::getProject)
@@ -326,15 +331,13 @@ public class ProjectServiceImpl implements ProjectService {
      */
     private ProjectWithTeamDTO mapToProjectResponseWithTeam(Project project,
                                                             List<TeamAssignment> team) {
-        // Créez d'abord le DTO de base
         ProjectWithTeamDTO response = new ProjectWithTeamDTO();
 
-        // Copiez les propriétés de base
         ProjectResponseDTO baseDto = mapToProjectResponseDTO(project);
         copyProperties(baseDto, response);
 
-        // Ajoutez les membres d'équipe
         List<TeamMemberDTO> teamMembers = team.stream()
+                .filter(assignment -> Boolean.TRUE.equals(assignment.getActive()))
                 .map(assignment -> mapToTeamMemberDTO(assignment))
                 .collect(Collectors.toList());
 
@@ -348,6 +351,7 @@ public class ProjectServiceImpl implements ProjectService {
     private TeamMemberDTO mapToTeamMemberDTO(TeamAssignment assignment) {
         return TeamMemberDTO.builder()
                 .id(assignment.getEmployee().getId())
+                .assignmentId(assignment.getId() != null ? assignment.getId().longValue() : null) // ← AJOUTER
                 .firstName(assignment.getEmployee().getFirstName())
                 .lastName(assignment.getEmployee().getLastName())
                 .email(assignment.getEmployee().getEmail())
@@ -398,7 +402,4 @@ public class ProjectServiceImpl implements ProjectService {
                 .map(this::mapToProjectResponseDTO)
                 .collect(Collectors.toList());
     }
-
-
-
 }

@@ -1,30 +1,28 @@
 package com.example.pfe.Repository;
 
-import com.example.pfe.entities.TeamAssignment;
 import com.example.pfe.entities.Project;
+import com.example.pfe.entities.TeamAssignment;
 import com.example.pfe.entities.User;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
 @Repository
-public interface TeamAssignmentRepository extends JpaRepository<TeamAssignment, Long> {
+public interface TeamAssignmentRepository extends JpaRepository<TeamAssignment, Integer> {
 
-    List<TeamAssignment> findByProjectAndActiveTrue(Project project);
+    // Find by project
+    List<TeamAssignment> findByProjectId(Long projectId);
 
-    List<TeamAssignment> findByEmployeeAndActiveTrue(User employee);
+    // Find by employee
+    List<TeamAssignment> findByEmployeeId(Long employeeId);
 
-    List<TeamAssignment> findByAssigningManagerAndActiveTrue(User manager);
+    // Find by project and employee
+    List<TeamAssignment> findByProjectIdAndEmployeeId(Long projectId, Long employeeId);
 
-    boolean existsByProjectAndEmployee(Project project, User employee);
+    // Check if exists with active true
+    boolean existsByProjectAndEmployeeAndActiveTrue(Project project, User employee);
 
-    // Ajoutez cette méthode
-    long countByProject(Project project);
-
-    // Méthode pour trouver par projet
-    @Query("SELECT ta FROM TeamAssignment ta WHERE ta.project.id = :projectId AND ta.active = true")
-    List<TeamAssignment> findByProjectId(@Param("projectId") Long projectId);
+    // Find by assigning manager
+    List<TeamAssignment> findByAssigningManagerId(Long managerId);
 }

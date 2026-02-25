@@ -14,7 +14,6 @@ public interface ProjectService {
     ProjectResponseDTO createProject(ProjectRequestDTO requestDTO);
     ProjectResponseDTO updateProject(Long id, ProjectRequestDTO requestDTO);
     ProjectResponseDTO getProjectById(Long id);
-    ProjectWithTeamDTO getProjectWithTeam(Long projectId);
     Page<ProjectResponseDTO> getAllProjects(Pageable pageable);
     void deleteProject(Long id);
 
@@ -24,16 +23,15 @@ public interface ProjectService {
     List<ProjectResponseDTO> getProjectsByManager(Long managerId);
     List<ProjectResponseDTO> searchProjects(String keyword);
     List<ProjectResponseDTO> getActiveProjects();
-    long countProjectsByStatus(ProjectStatus status);
     List<ProjectResponseDTO> getInactiveProjects();
+    long countProjectsByStatus(ProjectStatus status);
+    boolean existsByCode(String code);
+    ProjectResponseDTO getProjectByCode(String code);
 
-    // Team Management
-    TeamAssignment assignTeamMember(TeamAssignmentDTO assignmentDTO);
+    // Team Management - CHANGER LE TYPE DE RETOUR ICI
+    TeamAssignmentResponseDTO assignTeamMember(TeamAssignmentDTO assignmentDTO);
     void removeTeamMember(Long assignmentId);
     List<TeamMemberDTO> getProjectTeamMembers(Long projectId);
     List<ProjectResponseDTO> getEmployeeProjects(Long employeeId);
-
-    // Utility Methods
-    boolean existsByCode(String code);
-    ProjectResponseDTO getProjectByCode(String code);
+    ProjectWithTeamDTO getProjectWithTeam(Long projectId);
 }

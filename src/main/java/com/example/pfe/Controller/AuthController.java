@@ -1,9 +1,12 @@
 package com.example.pfe.Controller;
 
+
+import com.example.pfe.dto.ChangePasswordDTO;
 import com.example.pfe.Repository.UserRepository;
 import com.example.pfe.Service.AuthenticationService;
 import com.example.pfe.Service.JwtService;
 import com.example.pfe.Service.TokenBlacklistService;
+import com.example.pfe.Service.UserService;
 import com.example.pfe.dto.*;
 import com.example.pfe.entities.User;
 import com.example.pfe.exception.BusinessException;
@@ -19,7 +22,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
+import com.example.pfe.Service.UserService;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -39,6 +42,9 @@ public class AuthController {
     private final JwtService jwtService;
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final UserService userService;
+
+
     @PostMapping("/login")
     public ResponseEntity<JwtResponseDTO> login(@Valid @RequestBody LoginRequestDTO request) {
         JwtResponseDTO response = authenticationService.authenticate(request);
@@ -97,6 +103,7 @@ public class AuthController {
 
 
     @GetMapping("/me")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<UserResponseDTO> getCurrentUser(
             @AuthenticationPrincipal UserDetails userDetails
     ) {
@@ -107,6 +114,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader) {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
@@ -172,6 +180,7 @@ public class AuthController {
 
 
     @GetMapping("/me/menu")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<Map<String, Object>>> getUserMenu(
             @AuthenticationPrincipal UserDetails userDetails
     ) {
@@ -211,4 +220,24 @@ public class AuthController {
 
         return ResponseEntity.ok(menu);
     }
+
+
+
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody ChangePasswordDTO request) {
+        try {
+            userService.changePassword(userDetails.getUsername(), request);
+            return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
+        } catch (BusinessException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error changing password: ", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Failed to change password"));
+        }
+    }
+
 }

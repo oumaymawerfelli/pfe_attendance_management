@@ -165,9 +165,10 @@ public class UserMapper {
                 .enabled(user.isEnabled())
                 .registrationPending(user.isRegistrationPending())
                 .accountNonLocked(user.isAccountNonLocked())
-
                 .lastLogin(user.getLastLogin() != null ?
                         user.getLastLogin().atStartOfDay() : null)
                 .username(user.getUsername())
+                // ✅ AJOUTER CETTE LIGNE
+                .avatar(user.getAvatar())
                 .build();
     }}

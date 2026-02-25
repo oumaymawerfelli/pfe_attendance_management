@@ -14,7 +14,7 @@
     <div style="margin-bottom: 25px; position: relative;">
       <div style="width: 140px; height: 140px; margin: 0 auto; background: rgba(255,255,255,0.15); border-radius: 50%; padding: 10px; backdrop-filter: blur(10px); box-shadow: 0 20px 40px rgba(0,0,0,0.2);">
         <!-- ONLY THE LOGO - NO FALLBACK DIV -->
-        <img src="cid:logo" alt="ArabSoft Logo" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.3);">
+        <img th:src="${logoBase64}" alt="ArabSoft Logo" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.3);">
       </div>
     </div>
     <h1 style="color: white; margin: 20px 0 10px; font-size: 36px; font-weight: 700; letter-spacing: -0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">Rappel d'activation</h1>

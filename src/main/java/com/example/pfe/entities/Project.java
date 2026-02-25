@@ -22,17 +22,26 @@ public class Project {
 
    @Id
    @GeneratedValue(strategy = GenerationType.IDENTITY)
-   @Column(name = "IdProject")
+   @Column(name = "id")  // Changed to match database column name
    private Long id;
 
+   @Column(name = "code")
    private String code;
+
+   @Column(name = "name")
    private String name;
+
+   @Column(name = "description")
    private String description;
 
    @Enumerated(EnumType.STRING)
+   @Column(name = "status")
    private ProjectStatus status;
 
+   @Column(name = "start_date")  // Changed to match database column name
    private LocalDate startDate;
+
+   @Column(name = "end_date")    // Changed to match database column name
    private LocalDate endDate;
 
    @Column(name = "assignment_date")

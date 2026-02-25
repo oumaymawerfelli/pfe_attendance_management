@@ -49,6 +49,8 @@ public class UserResponseDTO {
     private LocalDateTime lastLogin;
     private String username;
     private LocalDateTime createdAt;
+    private String avatar;
+
 
     private boolean accountNonLocked;
 }

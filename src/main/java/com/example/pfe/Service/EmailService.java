@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.Year;
+import java.util.Base64;
 
 @Service
 @RequiredArgsConstructor
@@ -33,7 +35,17 @@ public class EmailService {
     @Value("${app.email.simulated:false}")
     private boolean simulated;
 
-    // src/main/java/com/example/pfe/Service/EmailService.java
+    // ✅ Encode le logo en base64 — pas de pièce jointe, directement dans le HTML
+    private String getLogoBase64() {
+        try {
+            ClassPathResource logo = new ClassPathResource("static/images/logo1.jpg");
+            byte[] bytes = logo.getInputStream().readAllBytes();
+            return "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(bytes);
+        } catch (IOException e) {
+            log.warn("⚠️ Logo not found: {}", e.getMessage());
+            return "";
+        }
+    }
 
     @Async
     public void sendWelcomeEmail(String toEmail, String fullName,
@@ -57,23 +69,6 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject("🎉 Bienvenue sur ArabSoft - Activez votre compte");
 
-            // ✅ CORRIGÉ: Utiliser le même chemin partout
-            try {
-                // Essayer d'abord avec .jpg (comme dans reminder)
-                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.jpg");
-                helper.addInline("logo", logoResource);
-                log.info("✅ Logo embedded successfully");
-            } catch (Exception e) {
-                // Fallback: essayer avec .webp
-                try {
-                    ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
-                    helper.addInline("logo", logoResource);
-                    log.info("✅ Logo embedded with .webp format");
-                } catch (Exception ex) {
-                    log.warn("⚠️ Logo not found at any path");
-                }
-            }
-
             Context context = new Context();
             context.setVariable("fullName", fullName);
             context.setVariable("toEmail", toEmail);
@@ -81,6 +76,7 @@ public class EmailService {
             context.setVariable("activationToken", activationToken);
             context.setVariable("activationLink", activationLink);
             context.setVariable("currentYear", Year.now().getValue());
+            context.setVariable("logoBase64", getLogoBase64());
 
             String htmlContent = templateEngine.process("welcome", context);
             helper.setText(htmlContent, true);
@@ -109,26 +105,12 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject("⏰ Rappel : Activez votre compte ArabSoft");
 
-            // ✅ CORRIGÉ: Même logique que dans welcome
-            try {
-                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.jpg");
-                helper.addInline("logo", logoResource);
-                log.info("✅ Logo embedded successfully");
-            } catch (Exception e) {
-                try {
-                    ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
-                    helper.addInline("logo", logoResource);
-                    log.info("✅ Logo embedded with .webp format");
-                } catch (Exception ex) {
-                    log.warn("⚠️ Logo not found at any path");
-                }
-            }
-
             Context context = new Context();
             context.setVariable("toEmail", toEmail);
             context.setVariable("activationToken", activationToken);
             context.setVariable("activationLink", frontendUrl + "/#/auth/activate?token=" + activationToken);
             context.setVariable("currentYear", LocalDateTime.now().getYear());
+            context.setVariable("logoBase64", getLogoBase64());
 
             String htmlContent = templateEngine.process("reminder", context);
             helper.setText(htmlContent, true);
@@ -140,6 +122,7 @@ public class EmailService {
             log.error("❌ Failed to send reminder: {}", e.getMessage());
         }
     }
+
     @Async
     public void sendPasswordResetEmail(String toEmail, String fullName, String newPassword) {
         if (simulated) {
@@ -156,26 +139,12 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject("🔐 Réinitialisation de votre mot de passe");
 
-            // ✅ CORRIGÉ: Utiliser la même logique que welcome et reminder
-            try {
-                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.jpg");
-                helper.addInline("logo", logoResource);
-                log.info("✅ Logo embedded successfully");
-            } catch (Exception e) {
-                try {
-                    ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
-                    helper.addInline("logo", logoResource);
-                    log.info("✅ Logo embedded with .webp format");
-                } catch (Exception ex) {
-                    log.warn("⚠️ Logo not found at any path");
-                }
-            }
-
             Context context = new Context();
             context.setVariable("fullName", fullName);
             context.setVariable("newPassword", newPassword);
             context.setVariable("loginLink", frontendUrl + "/#/login");
             context.setVariable("currentYear", Year.now().getValue());
+            context.setVariable("logoBase64", getLogoBase64());
 
             String htmlContent = templateEngine.process("password-reset", context);
             helper.setText(htmlContent, true);
@@ -188,6 +157,7 @@ public class EmailService {
             log.info("🔷 FALLBACK - New password for {}: {}", toEmail, newPassword);
         }
     }
+
     @Async
     public void sendProjectAssignmentEmail(String toEmail, String fullName,
                                            String projectName, String projectDescription,
@@ -211,14 +181,6 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject("📋 Vous avez été assigné au projet : " + projectName);
 
-            // Try to embed logo (fails gracefully if logo doesn't exist)
-            try {
-                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
-                helper.addInline("logo", logoResource);
-            } catch (Exception e) {
-                log.warn("⚠️ Logo not found, sending email without logo: {}", e.getMessage());
-            }
-
             Context context = new Context();
             context.setVariable("fullName", fullName);
             context.setVariable("projectName", projectName);
@@ -226,6 +188,7 @@ public class EmailService {
             context.setVariable("assignmentNotes", assignmentNotes);
             context.setVariable("assignmentDate", LocalDateTime.now());
             context.setVariable("currentYear", Year.now().getValue());
+            context.setVariable("logoBase64", getLogoBase64());
 
             String htmlContent = templateEngine.process("project-assignment-email", context);
             helper.setText(htmlContent, true);
@@ -262,19 +225,12 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject("📤 Désaffectation du projet : " + projectName);
 
-            // Try to embed logo (fails gracefully if logo doesn't exist)
-            try {
-                ClassPathResource logoResource = new ClassPathResource("static/images/logo1.webp");
-                helper.addInline("logo", logoResource);
-            } catch (Exception e) {
-                log.warn("⚠️ Logo not found, sending email without logo: {}", e.getMessage());
-            }
-
             Context context = new Context();
             context.setVariable("recipientName", recipientName);
             context.setVariable("projectName", projectName);
             context.setVariable("unassignmentDate", LocalDateTime.now());
             context.setVariable("currentYear", Year.now().getValue());
+            context.setVariable("logoBase64", getLogoBase64());
 
             String htmlContent = templateEngine.process("project-unassignment-email", context);
             helper.setText(htmlContent, true);
@@ -341,8 +297,6 @@ public class EmailService {
         );
         sendEmail(to, subject, body);
     }
-
-    // ========== MÉTHODES PRIVÉES ==========
 
     private void logSimulatedEmail(String type, String to, String details) {
         log.info("\n🔷 === SIMULATED EMAIL - {} ===", type);

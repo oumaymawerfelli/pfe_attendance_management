@@ -160,4 +160,10 @@ public class User {
               .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name()))
               .collect(Collectors.toList());
    }
+   @Column
+   private String avatar; // URL of the user's profile photo
+
+
+
+
 }

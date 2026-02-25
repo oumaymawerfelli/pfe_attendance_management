@@ -14,7 +14,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
+import java.util.Map;
 import java.util.List;
 import java.util.Map;
 
@@ -123,5 +125,17 @@ public class UserController {
         }
 
         return ResponseEntity.ok(response);
+    }
+    @PostMapping(value = "/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, String>> uploadUserPhoto(
+            @PathVariable Long id,
+            @RequestParam("photo") MultipartFile photo) {
+
+        String avatarUrl = userService.uploadUserPhoto(id, photo);
+
+        return ResponseEntity.ok(Map.of(
+                "avatarUrl", avatarUrl,
+                "message", "Photo uploaded successfully"
+        ));
     }
 }

@@ -14,4 +14,5 @@ public class TeamMemberDTO {
     private String email;
     private LocalDate assignedDate;
     private String assigningManager;
+    private Long assignmentId;
 }

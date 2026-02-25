@@ -45,7 +45,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
         );
         return findByStatuses(activeStatuses);
     }
-
+    boolean existsByProjectManagerAndIdNot(User projectManager, Long id);
     // Méthode pour les projets inactifs
     default List<Project> findInactiveProjects() {
         List<ProjectStatus> inactiveStatuses = List.of(

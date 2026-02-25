@@ -1,5 +1,6 @@
 package com.example.pfe.Service;
 
+import com.example.pfe.dto.ChangePasswordDTO;
 import com.example.pfe.dto.UserRequestDTO;
 import com.example.pfe.dto.UserResponseDTO;
 import com.example.pfe.dto.UserStatsDTO;
@@ -12,6 +13,7 @@ import com.example.pfe.exception.BusinessException;
 import com.example.pfe.exception.ResourceNotFoundException;
 import com.example.pfe.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +25,13 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
 @Service
 @Transactional
 @RequiredArgsConstructor
@@ -37,7 +46,11 @@ public class UserService {
     private final JwtService jwtService;
 
     // ==================== CRUD OPERATIONS ====================
+    @Value("${app.upload.dir:uploads/avatars}")
+    private String uploadDir;
 
+    @Value("${app.base-url:http://localhost:8080}")
+    private String baseUrl;
     /**
      * Créer un nouvel utilisateur (pour admin)
      */
@@ -53,24 +66,29 @@ public class UserService {
         // 3. Créer l'entité
         User user = buildUserEntity(userRequestDTO, temporaryPassword);
 
-        // 5. Assigner les rôles
+        // 4. Assigner les rôles (AVANT la sauvegarde)
         assignRoles(user, userRequestDTO);
 
-        // 6. Gérer les relations
+        // 5. Gérer les relations
         setUserRelations(user, userRequestDTO);
 
-        // 4. Générer token d'activation
+        // 6. Générer token d'activation
         String activationToken = generateActivationToken(user);
         user.setActivationToken(activationToken);
         user.setActivationTokenExpiry(LocalDateTime.now().plusDays(7));
 
-        // 5. Sauvegarder
+        // 7. 🔥 FORCER LA SAUVEGARDE DES RÔLES
         user = userRepository.save(user);
 
-        // 6. Envoyer email d'activation
+        // Forcer le rafraîchissement pour s'assurer que les rôles sont chargés
+        userRepository.flush();
+
+        // 8. Envoyer email d'activation
         sendActivationEmail(user, temporaryPassword);
 
-        log.info("User created successfully: {} (ID: {})", user.getEmail(), user.getId());
+        log.info("User created successfully: {} (ID: {}) with {} roles",
+                user.getEmail(), user.getId(), user.getRoles().size());
+
         return userMapper.toResponseDTO(user);
     }
 
@@ -202,43 +220,43 @@ public class UserService {
         User user = userMapper.toEntity(dto);
         user.setUsername(dto.getEmail());
         user.setPasswordHash(passwordEncoder.encode(tempPassword));
-        user.setEnabled(false);           // Not registered yet
-        user.setActive(false);            // ← CHANGED: was true, now false (no login until approved)
+        user.setEnabled(false);           // Not activated yet
+        user.setActive(false);            // Not active until approved+activated
         user.setFirstLogin(true);
         user.setAccountNonExpired(true);
         user.setAccountNonLocked(true);
         user.setCredentialsNonExpired(true);
-        user.setRegistrationPending(true);
+        user.setRegistrationPending(true);  // Waiting for admin approval
         return user;
     }
 
 
     private void assignRoles(User user, UserRequestDTO dto) {
         List<Role> roles = new ArrayList<>();
+        log.info("🎯 Assigning roles for user: {}", user.getEmail());
 
         if (dto.getRoleNames() != null && !dto.getRoleNames().isEmpty()) {
             for (String roleName : dto.getRoleNames()) {
-                try {
-                    RoleName roleNameEnum = RoleName.valueOf(roleName.toUpperCase());
-                    Role role = roleRepository.findByName(roleNameEnum)
-                            .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleName));
-
-                    // Éviter les doublons
-                    if (roles.stream().noneMatch(r -> r.getId().equals(role.getId()))) {
-                        roles.add(role);
-                    }
-                } catch (IllegalArgumentException e) {
-                    throw new BusinessException("Invalid role name: " + roleName);
-                }
+                RoleName roleNameEnum = RoleName.valueOf(roleName.toUpperCase());
+                Role role = roleRepository.findByName(roleNameEnum)
+                        .orElseThrow(() -> new ResourceNotFoundException("Role not found: " + roleName));
+                roles.add(role);
             }
+            log.info("✅ Assigned {} roles from DTO", roles.size());
         } else {
             // Rôle par défaut
             Role defaultRole = roleRepository.findByName(RoleName.EMPLOYEE)
                     .orElseThrow(() -> new ResourceNotFoundException("EMPLOYEE role not found"));
             roles.add(defaultRole);
+            log.info("✅ Assigned default EMPLOYEE role");
         }
 
-        user.setRoles(roles);
+        // 🔥 IMPORTANT: S'assurer que la collection est modifiable
+        if (user.getRoles() == null) {
+            user.setRoles(new ArrayList<>());
+        }
+        user.getRoles().clear();
+        user.getRoles().addAll(roles);
     }
 
     private void setUserRelations(User user, UserRequestDTO dto) {
@@ -458,5 +476,100 @@ public class UserService {
         Page<User> usersPage = userRepository.searchByKeyword(keyword.trim(), pageable);
         return usersPage.map(userMapper::toResponseDTO);
     }
+
+    public void changePassword(String email, ChangePasswordDTO dto) {
+        // Validate passwords match
+        if (!dto.getNewPassword().equals(dto.getConfirmPassword())) {
+            throw new BusinessException("Passwords do not match");
+        }
+
+        // Find user
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        // Verify current password
+        if (!passwordEncoder.matches(dto.getCurrentPassword(), user.getPasswordHash())) {
+            throw new BusinessException("Current password is incorrect");
+        }
+
+        // Prevent using the same password
+        if (passwordEncoder.matches(dto.getNewPassword(), user.getPasswordHash())) {
+            throw new BusinessException("New password must be different from current password");
+        }
+
+        // Update password
+        user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
+        user.setFirstLogin(false);
+        userRepository.save(user);
+
+        log.info("Password changed successfully for user: {}", email);
+    }
+
+
+
+    public String uploadUserPhoto(Long userId, MultipartFile photo) {
+        log.info("Uploading photo for user ID: {}", userId);
+
+        // Find the user
+        User user = getUserEntityById(userId);
+
+        // Validate file type
+        String contentType = photo.getContentType();
+        if (contentType == null ||
+                (!contentType.equals("image/jpeg") &&
+                        !contentType.equals("image/png") &&
+                        !contentType.equals("image/webp"))) {
+            throw new BusinessException("Only JPG, PNG or WebP images are allowed");
+        }
+
+        // Validate file size (5MB max)
+        long maxSize = 5L * 1024 * 1024;
+        if (photo.getSize() > maxSize) {
+            throw new BusinessException("Image must be smaller than 5MB");
+        }
+
+        try {
+            // Create upload directory if it doesn't exist
+            Path uploadPath = Paths.get(uploadDir);
+            if (!Files.exists(uploadPath)) {
+                Files.createDirectories(uploadPath);
+            }
+
+            // Delete old photo if exists
+            if (user.getAvatar() != null && !user.getAvatar().isEmpty()) {
+                String oldFileName = user.getAvatar().substring(user.getAvatar().lastIndexOf('/') + 1);
+                Path oldFilePath = uploadPath.resolve(oldFileName);
+                Files.deleteIfExists(oldFilePath);
+            }
+
+            // Generate unique filename
+            String extension = getFileExtension(photo.getOriginalFilename());
+            String newFileName = "avatar_" + userId + "_" + UUID.randomUUID() + "." + extension;
+            Path targetPath = uploadPath.resolve(newFileName);
+
+            // Save file
+            Files.copy(photo.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+            // Build public URL
+            String avatarUrl = baseUrl + "/uploads/avatars/" + newFileName;
+
+            // Save URL to user entity
+            user.setAvatar(avatarUrl);
+            userRepository.save(user);
+
+            log.info("Photo uploaded successfully for user {}: {}", user.getEmail(), avatarUrl);
+            return avatarUrl;
+
+        } catch (IOException e) {
+            log.error("Failed to upload photo for user {}: {}", userId, e.getMessage());
+            throw new BusinessException("Failed to save photo: " + e.getMessage());
+        }
+    }
+
+    private String getFileExtension(String filename) {
+        if (filename == null || !filename.contains(".")) return "jpg";
+        return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+    }
+
 
 }
