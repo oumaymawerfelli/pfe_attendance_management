@@ -61,7 +61,7 @@ public class UserMapper {
                 .hireDate(dto.getHireDate())
                 .contractType(dto.getContractType())
                 .contractEndDate(dto.getContractEndDate())
-                .baseSalary(dto.getBaseSalary())
+
                 .housingAllowance(dto.getHousingAllowance())
                 .evaluationScore(dto.getEvaluationScore())
                 .active(dto.getActive() != null ? dto.getActive() : true)
@@ -114,7 +114,7 @@ public class UserMapper {
         if (dto.getHireDate() != null) user.setHireDate(dto.getHireDate());
         if (dto.getContractType() != null) user.setContractType(dto.getContractType());
         if (dto.getContractEndDate() != null) user.setContractEndDate(dto.getContractEndDate());
-        if (dto.getBaseSalary() != null) user.setBaseSalary(dto.getBaseSalary());
+
         if (dto.getHousingAllowance() != null) user.setHousingAllowance(dto.getHousingAllowance());
         if (dto.getEvaluationScore() != null) user.setEvaluationScore(dto.getEvaluationScore());
         if (dto.getActive() != null) user.setActive(dto.getActive());

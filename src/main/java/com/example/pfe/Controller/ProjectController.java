@@ -32,7 +32,7 @@ public class ProjectController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER') or @securityService.isProjectManager(#id)")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ProjectResponseDTO> getProject(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.getProjectById(id));
     }
@@ -68,9 +68,8 @@ public class ProjectController {
     }
 
     @GetMapping("/{id}/team")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER')")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<TeamMemberDTO>> getTeamMembers(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.getProjectTeamMembers(id));
     }
-
 }

@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+//Defines structure,Has data?	No, just empty fields,Reusable?	Can be used many times
 public class RegistrationResponseDTO {
     private Long userId;
     private String email;

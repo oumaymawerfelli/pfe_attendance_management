@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              name="leave_document" pageWidth="595" pageHeight="842"
+              columnWidth="495" leftMargin="60" rightMargin="40"
+              topMargin="40" bottomMargin="40"
+              uuid="11111111-1111-1111-1111-111111111111">
+
+    <parameter name="FIRST_NAME"       class="java.lang.String"/>
+    <parameter name="LAST_NAME"        class="java.lang.String"/>
+    <parameter name="DEPARTMENT"       class="java.lang.String"/>
+    <parameter name="LEAVE_TYPE"       class="java.lang.String"/>
+    <parameter name="START_DATE"       class="java.lang.String"/>
+    <parameter name="END_DATE"         class="java.lang.String"/>
+    <parameter name="DAYS_COUNT"       class="java.lang.Integer"/>
+    <parameter name="REASON"           class="java.lang.String"/>
+    <parameter name="APPROVED_BY"      class="java.lang.String"/>
+    <parameter name="APPROVAL_DATE"    class="java.lang.String"/>
+    <parameter name="SIGNATURE_IMAGE"  class="java.io.InputStream"/>
+    <parameter name="COMPANY_LOGO"     class="java.io.InputStream"/>
+
+    <background>
+        <!-- Beige/cream full page background -->
+        <band height="762">
+            <rectangle>
+                <reportElement x="-60" y="-40" width="595" height="762"
+                               backcolor="#F5F0E8" forecolor="#F5F0E8"
+                               uuid="11111111-1111-1111-1111-111111111100"/>
+                <graphicElement><pen lineWidth="0.0"/></graphicElement>
+            </rectangle>
+        </band>
+    </background>
+
+    <title>
+        <band height="130">
+
+            <!-- Logo top left -->
+            <image scaleImage="RetainShape">
+                <reportElement x="0" y="0" width="90" height="45"
+                               uuid="11111111-1111-1111-1111-111111111112"/>
+                <imageExpression><![CDATA[$P{COMPANY_LOGO}]]></imageExpression>
+            </image>
+
+            <!-- Big employee name centered -->
+            <textField>
+                <reportElement x="0" y="50" width="495" height="45"
+                               uuid="11111111-1111-1111-1111-111111111113"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle">
+                    <font size="28" isBold="true" fontName="SansSerif"/>
+                </textElement>
+                <textFieldExpression>
+                    <![CDATA[$P{FIRST_NAME} + " " + $P{LAST_NAME}]]>
+                </textFieldExpression>
+            </textField>
+
+            <!-- Subtitle -->
+            <staticText>
+                <reportElement x="0" y="95" width="495" height="20"
+                               forecolor="#888888"
+                               uuid="11111111-1111-1111-1111-111111111114"/>
+                <textElement textAlignment="Center">
+                    <font size="11" fontName="SansSerif"/>
+                </textElement>
+                <text><![CDATA[Leave Authorization Letter]]></text>
+            </staticText>
+
+            <!-- Thin separator line -->
+            <line>
+                <reportElement x="0" y="120" width="495" height="1"
+                               forecolor="#CCBBAA"
+                               uuid="11111111-1111-1111-1111-111111111115"/>
+                <graphicElement><pen lineWidth="1.0"/></graphicElement>
+            </line>
+
+        </band>
+    </title>
+
+    <detail>
+        <band height="580">
+            <!-- Date & info block -->
+            <staticText>
+                <reportElement x="0" y="15" width="100" height="16"
+                               forecolor="#888888"
+                               uuid="11111111-1111-1111-1111-111111111116"/>
+                <textElement><font size="8" fontName="SansSerif"/></textElement>
+                <text><![CDATA[Date]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="0" y="31" width="200" height="16"
+                               uuid="11111111-1111-1111-1111-111111111117"/>
+                <textElement><font size="9" fontName="SansSerif"/></textElement>
+                <textFieldExpression><![CDATA[$P{APPROVAL_DATE}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement x="0" y="50" width="200" height="16"
+                               forecolor="#888888"
+                               uuid="11111111-1111-1111-1111-111111111118"/>
+                <textElement><font size="8" fontName="SansSerif"/></textElement>
+                <text><![CDATA[Department]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="0" y="66" width="200" height="16"
+                               uuid="11111111-1111-1111-1111-111111111119"/>
+                <textElement><font size="9" fontName="SansSerif"/></textElement>
+                <textFieldExpression><![CDATA[$P{DEPARTMENT}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement x="0" y="85" width="200" height="16"
+                               forecolor="#888888"
+                               uuid="11111111-1111-1111-1111-111111111120"/>
+                <textElement><font size="8" fontName="SansSerif"/></textElement>
+                <text><![CDATA[Approved by]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="0" y="101" width="300" height="16"
+                               uuid="11111111-1111-1111-1111-111111111121"/>
+                <textElement><font size="9" fontName="SansSerif"/></textElement>
+                <textFieldExpression><![CDATA[$P{APPROVED_BY}]]></textFieldExpression>
+            </textField>
+
+            <!-- Salutation -->
+            <staticText>
+                <reportElement x="0" y="135" width="495" height="20"
+                               uuid="11111111-1111-1111-1111-111111111122"/>
+                <textElement><font size="10" fontName="SansSerif"/></textElement>
+                <text><![CDATA[To whom it may concern,]]></text>
+            </staticText>
+
+            <!-- Paragraph 1 — leave summary -->
+            <textField isStretchWithOverflow="true">
+                <reportElement x="0" y="165" width="495" height="50"
+                               uuid="11111111-1111-1111-1111-111111111123"/>
+                <textElement textAlignment="Justified">
+                    <font size="10" fontName="SansSerif"/>
+                </textElement>
+                <textFieldExpression>
+                    <![CDATA["This letter confirms that " + $P{FIRST_NAME} + " " + $P{LAST_NAME}
++ " from the " + $P{DEPARTMENT} + " department has been granted a "
++ $P{LEAVE_TYPE} + " leave of absence."]]>
+                </textFieldExpression>
+            </textField>
+
+            <!-- Paragraph 2 — dates -->
+            <textField isStretchWithOverflow="true">
+                <reportElement x="0" y="225" width="495" height="50"
+                               uuid="11111111-1111-1111-1111-111111111124"/>
+                <textElement textAlignment="Justified">
+                    <font size="10" fontName="SansSerif"/>
+                </textElement>
+                <textFieldExpression>
+                    <![CDATA["The leave period is from " + $P{START_DATE} + " to " + $P{END_DATE}
++ ", for a total of " + $P{DAYS_COUNT} + " working day(s)."]]>
+                </textFieldExpression>
+            </textField>
+
+            <!-- Paragraph 3 — reason -->
+            <staticText>
+                <reportElement x="0" y="285" width="495" height="16"
+                               forecolor="#888888"
+                               uuid="11111111-1111-1111-1111-111111111125"/>
+                <textElement><font size="8" fontName="SansSerif"/></textElement>
+                <text><![CDATA[Reason for leave:]]></text>
+            </staticText>
+            <textField isStretchWithOverflow="true">
+                <reportElement x="0" y="301" width="495" height="50"
+                               uuid="11111111-1111-1111-1111-111111111126"/>
+                <textElement textAlignment="Justified">
+                    <font size="10" fontName="SansSerif"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{REASON}]]></textFieldExpression>
+            </textField>
+
+            <!-- Closing -->
+            <staticText>
+                <reportElement x="0" y="365" width="495" height="30"
+                               uuid="11111111-1111-1111-1111-111111111127"/>
+                <textElement textAlignment="Justified">
+                    <font size="10" fontName="SansSerif"/>
+                </textElement>
+                <text><![CDATA[This authorization has been duly approved and is effective as of the dates stated above. The employee is expected to resume duties on the next working day following the end of the leave period.]]></text>
+            </staticText>
+
+            <!-- Sign-off -->
+            <staticText>
+                <reportElement x="0" y="415" width="200" height="20"
+                               uuid="11111111-1111-1111-1111-111111111128"/>
+                <textElement><font size="10" fontName="SansSerif"/></textElement>
+                <text><![CDATA[Sincerely,]]></text>
+            </staticText>
+
+            <!-- Signature image -->
+            <image scaleImage="RetainShape">
+                <reportElement x="0" y="440" width="180" height="70"
+                               mode="Transparent"
+                               uuid="11111111-1111-1111-1111-111111111129"/>
+                <imageExpression><![CDATA[$P{SIGNATURE_IMAGE}]]></imageExpression>
+            </image>
+
+            <!-- Approved by name bold -->
+            <textField>
+                <reportElement x="0" y="515" width="300" height="18"
+                               uuid="11111111-1111-1111-1111-111111111130"/>
+                <textElement>
+                    <font size="10" isBold="true" fontName="SansSerif"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{APPROVED_BY}]]></textFieldExpression>
+            </textField>
+
+            <!-- Separator before footer -->
+            <line>
+                <reportElement x="0" y="540" width="495" height="1"
+                               forecolor="#CCBBAA"
+                               uuid="11111111-1111-1111-1111-111111111131"/>
+                <graphicElement><pen lineWidth="1.0"/></graphicElement>
+            </line>
+
+            <!-- Footer contact row -->
+            <staticText>
+                <reportElement x="0" y="548" width="160" height="14"
+                               forecolor="#888888"
+                               uuid="11111111-1111-1111-1111-111111111132"/>
+                <textElement textAlignment="Left">
+                    <font size="8" fontName="SansSerif"/>
+                </textElement>
+                <text><![CDATA[📞 HR Department]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="170" y="548" width="160" height="14"
+                               forecolor="#888888"
+                               uuid="11111111-1111-1111-1111-111111111133"/>
+                <textElement textAlignment="Center">
+                    <font size="8" fontName="SansSerif"/>
+                </textElement>
+                <text><![CDATA[🌐 www.arabsoft.com]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="340" y="548" width="155" height="14"
+                               forecolor="#888888"
+                               uuid="11111111-1111-1111-1111-111111111134"/>
+                <textElement textAlignment="Right">
+                    <font size="8" fontName="SansSerif"/>
+                </textElement>
+                <text><![CDATA[✉ hr@arabsoft.com]]></text>
+            </staticText>
+
+        </band>
+    </detail>
+</jasperReport>

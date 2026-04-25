@@ -184,43 +184,69 @@ public class AuthController {
     public ResponseEntity<List<Map<String, Object>>> getUserMenu(
             @AuthenticationPrincipal UserDetails userDetails
     ) {
-        log.info("🔍 GET /api/me/menu appelé par: {}", userDetails.getUsername());
-
-        // Générer le menu basé sur les rôles de l'utilisateur
         List<Map<String, Object>> menu = new ArrayList<>();
+        boolean isAdmin = hasRole(userDetails, "ROLE_ADMIN");
+        boolean isGM    = hasRole(userDetails, "ROLE_GENERAL_MANAGER");
+        boolean isPM    = hasRole(userDetails, "ROLE_PROJECT_MANAGER");
+        boolean isManager = isAdmin || isGM || isPM;
 
-        // Dashboard - accessible à tous
-        menu.add(Map.of(
-                "text", "Dashboard",
-                "link", "/dashboard",
-                "icon", "dashboard"
-        ));
+        menu.add(link("Dashboard", "dashboard", "dashboard"));
 
-        // Profile - accessible à tous
-        menu.add(Map.of(
-                "text", "Profile",
-                "link", "/profile",
-                "icon", "person"
-        ));
+        List<Map<String, Object>> attendanceChildren = new ArrayList<>();
+        attendanceChildren.add(child("My Summary", "summary", "link"));
+        attendanceChildren.add(child("History",    "history", "link"));
+        if (isManager) attendanceChildren.add(child("Manage All", "all", "link"));
+        menu.add(sub("Attendance", "attendance", "timer", attendanceChildren));
 
-        // Si l'utilisateur a le rôle GENERAL_MANAGER
-        if (userDetails.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_GENERAL_MANAGER"))) {
-            menu.add(Map.of(
-                    "text", "Employees",
-                    "link", "/employees",
-                    "icon", "people"
-            ));
-            menu.add(Map.of(
-                    "text", "Projects",
-                    "link", "/projects",
-                    "icon", "assignment"
-            ));
+        List<Map<String, Object>> leaveChildren = new ArrayList<>();
+        leaveChildren.add(child("My Leaves", "", "link"));
+        if (isManager) leaveChildren.add(child("Manage Leaves", "all", "link"));
+        menu.add(sub("Leave", "leave", "event_busy", leaveChildren));
+
+        menu.add(link("Notifications", "notifications", "notifications"));
+
+        if (isAdmin || isGM) {
+            menu.add(link("Users",    "users",    "people"));
+            menu.add(link("Projects", "projects", "assignment"));
         }
+
+        menu.add(link("Profile", "profile", "person"));
 
         return ResponseEntity.ok(menu);
     }
 
+    private boolean hasRole(UserDetails user, String role) {
+        return user.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(role));
+    }
+
+    private Map<String, Object> link(String name, String route, String icon) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("route", route);
+        item.put("name",  name);
+        item.put("type",  "link");
+        item.put("icon",  icon);
+        return item;
+    }
+
+    private Map<String, Object> sub(String name, String route, String icon,
+                                    List<Map<String, Object>> children) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("route",    route);
+        item.put("name",     name);
+        item.put("type",     "sub");
+        item.put("icon",     icon);
+        item.put("children", children);
+        return item;
+    }
+
+    private Map<String, Object> child(String name, String route, String type) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("route", route);
+        item.put("name",  name);
+        item.put("type",  type);
+        return item;
+    }
 
 
     @PostMapping("/change-password")

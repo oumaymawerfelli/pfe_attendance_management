@@ -33,14 +33,15 @@ public class ProjectServiceImpl implements ProjectService {
     private final TeamAssignmentRepository teamAssignmentRepository;
     private final TeamAssignmentService teamAssignmentService;
     private final ProjectMapper projectMapper;
+    private final NotificationService notificationService; // ← ADD THIS
 
     // ==================== CRUD OPERATIONS ====================
 
     @Override
     public ProjectResponseDTO createProject(ProjectRequestDTO requestDTO) {
-        log.info("Creating project: {}", requestDTO.getName());
+        log.info("Creating project: {}......", requestDTO.getName());
 
-        // Validate dates
+        // Validate dates Validates that end date isn't before start date
         if (requestDTO.getEndDate() != null &&
                 requestDTO.getStartDate() != null &&
                 requestDTO.getEndDate().isBefore(requestDTO.getStartDate())) {
@@ -50,40 +51,44 @@ public class ProjectServiceImpl implements ProjectService {
         // Generate project code
         String projectCode = generateProjectCode(requestDTO.getName());
 
-        // Check if code already exists
+        // Check if code already exists Checks if a project with the generated code already exists in the database
         if (projectRepository.existsByCode(projectCode)) {
             projectCode = projectCode + "-" + System.currentTimeMillis() % 1000;
         }
 
-        // Map DTO to entity
+        // mapToEntity(requestDTO): Creates a basic Project entity from the request DTO with:
+        //Name, description, status (defaults to PLANNED if null), start/end dates
+        //Sets the (potentially modified) unique project code
+        //Sets creation and update timestamps to the current time
         Project project = mapToEntity(requestDTO);
         project.setCode(projectCode);
         project.setCreatedAt(LocalDateTime.now());
         project.setUpdatedAt(LocalDateTime.now());
 
-        // Set project manager if provided
+        // Checks if a project manager ID was provided in the request(optional)
         if (requestDTO.getProjectManagerId() != null) {
             User projectManager = userRepository.findById(requestDTO.getProjectManagerId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Project manager not found: " + requestDTO.getProjectManagerId()));
             project.setProjectManager(projectManager);
         }
-
+        //saves the project to the database (returns the persisted entity with generated ID)
         Project savedProject = projectRepository.save(project);
         log.info("Project created successfully: {} (ID: {})", projectCode, savedProject.getId());
 
         return mapToProjectResponseDTO(savedProject);
     }
-
+    //__________________________________________________________________________________________________//
     @Override
     public ProjectResponseDTO updateProject(Long id, ProjectRequestDTO requestDTO) {
-        log.info("Updating project ID: {}", id);
+        log.info("Updating project ID: {}.....", id);
 
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Project not found: " + id));
 
         // Validate dates
+        //Validates that if both dates are provided, end date isn't before start date
         if (requestDTO.getEndDate() != null &&
                 requestDTO.getStartDate() != null &&
                 requestDTO.getEndDate().isBefore(requestDTO.getStartDate())) {
@@ -91,14 +96,17 @@ public class ProjectServiceImpl implements ProjectService {
         }
 
         // Update fields
+        //NB:  Project code is NOT updated (remains the same as original)
         project.setName(requestDTO.getName());
         project.setDescription(requestDTO.getDescription());
         project.setStatus(requestDTO.getStatus());
         project.setStartDate(requestDTO.getStartDate());
         project.setEndDate(requestDTO.getEndDate());
+        //Always updates the updatedAt timestamp to track when changes were made
         project.setUpdatedAt(LocalDateTime.now());
 
         // Update project manager if changed
+        //Scenario A: Changing/Adding a Project Manager
         if (requestDTO.getProjectManagerId() != null &&
                 (project.getProjectManager() == null ||
                         !project.getProjectManager().getId().equals(requestDTO.getProjectManagerId()))) {
@@ -107,17 +115,28 @@ public class ProjectServiceImpl implements ProjectService {
                             "Project manager not found: " + requestDTO.getProjectManagerId()));
             project.setProjectManager(projectManager);
             project.setAssignmentDate(LocalDateTime.now());
+
+            //Scenario B: Removing Project Manager
         } else if (requestDTO.getProjectManagerId() == null && project.getProjectManager() != null) {
             project.setProjectManager(null);
             project.setAssignmentDate(null);
-        }
+        } //Scenario C: No Change to Project Manager (either both null or same ID) → do nothing
 
         Project updatedProject = projectRepository.save(project);
         log.info("Project updated successfully: {} (ID: {})", project.getCode(), updatedProject.getId());
 
+        // Notify all team members about project update
+        teamAssignmentRepository.findByProjectId(project.getId())
+                .stream()
+                .filter(a -> Boolean.TRUE.equals(a.getActive()))
+                .forEach(a -> notificationService.notifyProjectUpdated(
+                        a.getEmployee().getId(),
+                        project.getName()
+                ));
+
         return mapToProjectResponseDTO(updatedProject);
     }
-
+    //__________________________________________________________________________________________________//
     @Override
     @Transactional(readOnly = true)
     public ProjectResponseDTO getProjectById(Long id) {
@@ -126,7 +145,7 @@ public class ProjectServiceImpl implements ProjectService {
                         "Project not found: " + id));
         return mapToProjectResponseDTO(project);
     }
-
+    //__________________________________________________________________________________________________//
     @Override
     @Transactional(readOnly = true)
     public ProjectWithTeamDTO getProjectWithTeam(Long projectId) {
@@ -138,7 +157,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         return mapToProjectResponseWithTeam(project, team);
     }
-
+    //__________________________________________________________________________________________________//
     @Override
     @Transactional(readOnly = true)
     public Page<ProjectResponseDTO> getAllProjects(Pageable pageable) {
@@ -152,7 +171,7 @@ public class ProjectServiceImpl implements ProjectService {
 
         return projectPage.map(project -> mapToProjectResponseDTO(project));
     }
-
+    //__________________________________________________________________________________________________//
     @Override
     public void deleteProject(Long id) {
         log.info("Deleting project ID: {}", id);
@@ -234,7 +253,30 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     public TeamAssignmentResponseDTO assignTeamMember(TeamAssignmentDTO assignmentDTO) {
-        return teamAssignmentService.assignEmployeeToProject(assignmentDTO);
+        TeamAssignmentResponseDTO response = teamAssignmentService.assignEmployeeToProject(assignmentDTO);
+
+        // Get project details for notifications
+        Project project = projectRepository.findById(assignmentDTO.getProjectId())
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
+
+        // Notify the employee they've been added to the project
+        notificationService.notifyProjectAssigned(
+                assignmentDTO.getEmployeeId(),
+                project.getName()
+        );
+
+        // If a PM is set on the project, also notify PM assignment
+        if (project.getProjectManager() != null) {
+            String pmName = project.getProjectManager().getFirstName()
+                    + " " + project.getProjectManager().getLastName();
+            notificationService.notifyPmAssigned(
+                    assignmentDTO.getEmployeeId(),
+                    pmName,
+                    project.getName()
+            );
+        }
+
+        return response;
     }
 
     @Override
@@ -351,7 +393,7 @@ public class ProjectServiceImpl implements ProjectService {
     private TeamMemberDTO mapToTeamMemberDTO(TeamAssignment assignment) {
         return TeamMemberDTO.builder()
                 .id(assignment.getEmployee().getId())
-                .assignmentId(assignment.getId() != null ? assignment.getId().longValue() : null) // ← AJOUTER
+                .assignmentId(assignment.getId() != null ? assignment.getId().longValue() : null)
                 .firstName(assignment.getEmployee().getFirstName())
                 .lastName(assignment.getEmployee().getLastName())
                 .email(assignment.getEmployee().getEmail())

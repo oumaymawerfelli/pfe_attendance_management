@@ -1,4 +1,3 @@
-// java
 package com.example.pfe.Service;
 
 import io.jsonwebtoken.*;
@@ -22,36 +21,40 @@ import java.util.stream.Collectors;
 public class JwtService {
 
     @Value("${app.jwt.secret:defaultsecretchangeme}")
-    private String secret;
+    private String secret;// Secret key for signing tokens
 
     @Value("${jwt.clock-skew-seconds:60}")
-    private long clockSkewSeconds;
+    private long clockSkewSeconds;// Allow 60 sec time difference (server/client)
+
 
     @Value("${jwt.access-token-expiration-ms:3600000}") // 1h
-    private long accessTokenExpirationMs;
+    private long accessTokenExpirationMs;// How long access tokens live
 
     @Value("${jwt.activation-token-expiration-ms:604800000}") // 7 days
-    private long activationTokenExpirationMs;
+    private long activationTokenExpirationMs;// How long activation tokens live
 
     private Key signingKey;
 
     @PostConstruct
     public void init() {
+        // This runs when the service is created - it initializes the signing key based on the secret
         try {
+
+            // Check if secret is configured
             if (secret == null || secret.trim().isEmpty()) {
                 log.warn("jwt.secret is not set - generating a secure random key for JWTs");
                 signingKey = Keys.secretKeyFor(SignatureAlgorithm.HS256);
                 return;
             }
-
+            // Try to decode the secret (it could be Base64 encoded)
             byte[] keyBytes;
-            // try to decode as Base64 first, fallback to UTF-8 bytes
-            try {
-                keyBytes = Decoders.BASE64.decode(secret);
-            } catch (IllegalArgumentException e) {
-                keyBytes = secret.getBytes(StandardCharsets.UTF_8);
-            }
 
+            try {
+                keyBytes = Decoders.BASE64.decode(secret);// Try Base64 first
+            } catch (IllegalArgumentException e) {
+                keyBytes = secret.getBytes(StandardCharsets.UTF_8); // Fallback to raw bytes
+            }
+            // Check if key is strong enough (needs at least 256 bits)
             int bits = keyBytes.length * 8;
             if (bits < 256) {
                 log.warn("Provided jwt.secret is too weak ({} bits). Generating a secure random key.", bits);
@@ -141,6 +144,7 @@ public class JwtService {
     }
 
     public boolean isTokenValid(String token) {
+        if (token == null || token.isBlank()) return false;
         try {
             Claims claims = parseClaims(token);
             Date exp = claims.getExpiration();
@@ -311,4 +315,10 @@ public class JwtService {
                 .signWith(signingKey, SignatureAlgorithm.HS256)
                 .compact();
     }
+
+    //Think of JWT as a digital passport:
+    //It contains user information
+    //It's cryptographically signed (can't be forged)
+    //It expires after some time
+    //The client sends it with every request to prove "I'm logged in!"
 }

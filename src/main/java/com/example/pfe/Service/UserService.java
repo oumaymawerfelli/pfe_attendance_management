@@ -4,8 +4,10 @@ import com.example.pfe.dto.ChangePasswordDTO;
 import com.example.pfe.dto.UserRequestDTO;
 import com.example.pfe.dto.UserResponseDTO;
 import com.example.pfe.dto.UserStatsDTO;
+import com.example.pfe.entities.Attendance;
 import com.example.pfe.entities.Role;
 import com.example.pfe.entities.User;
+import com.example.pfe.enums.AttendanceStatus;
 import com.example.pfe.enums.RoleName;
 import com.example.pfe.Repository.RoleRepository;
 import com.example.pfe.Repository.UserRepository;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -77,7 +80,7 @@ public class UserService {
         user.setActivationToken(activationToken);
         user.setActivationTokenExpiry(LocalDateTime.now().plusDays(7));
 
-        // 7. 🔥 FORCER LA SAUVEGARDE DES RÔLES
+        // 7.  FORCER LA SAUVEGARDE DES RÔLES
         user = userRepository.save(user);
 
         // Forcer le rafraîchissement pour s'assurer que les rôles sont chargés
@@ -569,6 +572,31 @@ public class UserService {
     private String getFileExtension(String filename) {
         if (filename == null || !filename.contains(".")) return "jpg";
         return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+    }
+
+
+
+
+    // On check-in → service computes status
+    private AttendanceStatus computeStatus(LocalDateTime checkIn) {
+        int hour   = checkIn.getHour();
+        int minute = checkIn.getMinute();
+        boolean isLate = (hour > 8) || (hour == 8 && minute > 30);
+        return isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+    }
+
+    // On check-out → service computes duration + overtime
+    private void computeDuration(Attendance attendance) {
+        long minutes = ChronoUnit.MINUTES.between(
+                attendance.getCheckIn(), attendance.getCheckOut()
+        );
+        double worked = minutes / 60.0;
+        attendance.setWorkDuration(worked);
+        attendance.setOvertimeHours(Math.max(0.0, worked - 8.0));
+
+        if (worked < 4.0 && attendance.getStatus() != AttendanceStatus.ABSENT) {
+            attendance.setStatus(AttendanceStatus.HALF_DAY);
+        }
     }
 
 

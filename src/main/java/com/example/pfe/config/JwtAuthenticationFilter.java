@@ -1,4 +1,3 @@
-// src/main/java/com/example/pfe/config/JwtAuthenticationFilter.java
 package com.example.pfe.config;
 
 import com.example.pfe.Service.JwtService;
@@ -81,24 +80,43 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Try to get JWT from Authorization header first
         String authHeader = request.getHeader("Authorization");
+        String jwt = null;
+
+        // If no Authorization header, try to get token from query parameter (for SSE)
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            String tokenParam = request.getParameter("token");
+            if (tokenParam != null && !tokenParam.isEmpty()) {
+                log.debug("Found token in query parameter for SSE connection: {}", path);
+                jwt = tokenParam;
+                // Also set it as a header for consistency in logs
+                authHeader = "Bearer " + tokenParam;
+            }
+        } else {
+            // Extract from header if present
+            jwt = authHeader.substring(7);
+        }
+
         log.debug("Auth header present: {}", authHeader != null);
 
         if (authHeader == null) {
-            log.debug("No Authorization header found for protected endpoint: {}", path);
+            log.debug("No Authorization header or token param found for protected endpoint: {}", path);
             filterChain.doFilter(request, response);
             return;
         }
 
-        log.debug("Auth header value: {}", authHeader);
+        // If we got here via query param, jwt is already set
+        if (jwt == null && authHeader != null && authHeader.startsWith("Bearer ")) {
+            jwt = authHeader.substring(7);
+        }
 
-        if (!authHeader.startsWith("Bearer ")) {
-            log.debug("Auth header does not start with Bearer: {}", authHeader);
+        if (jwt == null || jwt.isEmpty()) {
+            log.debug("No valid JWT token found for path: {}", path);
             filterChain.doFilter(request, response);
             return;
         }
 
-        String jwt = authHeader.substring(7);
         log.debug("Extracted JWT token length: {}", jwt.length());
         log.debug("Token preview: {}...", jwt.substring(0, Math.min(20, jwt.length())));
 
@@ -159,7 +177,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            log.debug("✅ Authenticated user {}", userEmail);
+            log.debug("✅ Authenticated user {} for SSE/path: {}", userEmail, path);
         }
 
         filterChain.doFilter(request, response);
