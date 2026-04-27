@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -48,6 +49,7 @@ public class AttendanceService {
 
     // ── Check-in ──────────────────────────────────────────────────────────────
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void checkIn(Long userId) {
         LocalDateTime now   = LocalDateTime.now();
         LocalDate     today = LocalDate.now();
@@ -75,6 +77,7 @@ public class AttendanceService {
 
     // ── Check-out ─────────────────────────────────────────────────────────────
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void checkOutOnLogout(Long userId, String notes) {
         attendanceRepository.findByUserIdAndDate(userId, LocalDate.now())
                 .filter(a -> a.getCheckIn() != null)

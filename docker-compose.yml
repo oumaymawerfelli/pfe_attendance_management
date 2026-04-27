@@ -1,0 +1,82 @@
+services:
+
+  # ============================================
+  # SERVICE 1 : Base de données MySQL
+  # ============================================
+  mysql-db:
+    image: mysql:8.0
+    container_name: mysql-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ============================================
+  # SERVICE 2 : Backend Spring Boot
+  # ============================================
+  backend-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mon-backend:latest
+    container_name: backend-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
+      APP_BASE_URL: ${APP_BASE_URL}
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - app-network
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+
+  # ============================================
+  # SERVICE 3 : Frontend Angular + Nginx
+  # ============================================
+  frontend-app:
+    build:
+      context: ../attendance-management
+      dockerfile: Dockerfile
+    image: mon-frontend:latest
+    container_name: frontend-app
+    restart: unless-stopped
+    ports:
+      - "4200:80"
+    networks:
+      - app-network
+    depends_on:
+      - backend-app
+
+# ============================================
+# RÉSEAU PARTAGÉ
+# ============================================
+networks:
+  app-network:
+    driver: bridge
+
+# ============================================
+# VOLUME PERSISTANT (pour MySQL)
+# ============================================
+volumes:
+  mysql-data:
