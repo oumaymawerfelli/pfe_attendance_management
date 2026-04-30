@@ -101,7 +101,7 @@ pipeline {
                 echo 'Verification du backend...'
                 sh '''
                     for i in $(seq 1 24); do
-                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ || echo "000")
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/ || echo "000")
                         if echo "$STATUS" | grep -qE "200|401|403"; then
                             echo "Backend repond avec code: $STATUS"
                             exit 0
@@ -142,7 +142,7 @@ pipeline {
             echo 'DEPLOIEMENT COMPLET REUSSI !'
             echo ''
             echo 'Frontend: http://192.168.33.10:4200'
-            echo 'Backend : http://192.168.33.10:8080'
+            echo 'Backend : http://192.168.33.10:8081'
             echo 'MySQL   : 192.168.33.10:3306'
             echo '==============================================='
         }
