@@ -56,7 +56,7 @@ services:
   # ============================================
   frontend-app:
     build:
-      context: ../attendance-management
+      context: ../pfe_attendance_management_front
       dockerfile: Dockerfile
     image: mon-frontend:latest
     container_name: frontend-app

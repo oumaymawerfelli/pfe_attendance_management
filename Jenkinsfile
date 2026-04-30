@@ -10,8 +10,9 @@ pipeline {
         IMAGE_NAME = 'mon-backend'
         APP_PORT = '8080'
         ENV_FILE = '/etc/pfe/.env'
-        FRONTEND_REPO = 'https://github.com/oumaymawerfelli/attendance-management.git'
-        FRONTEND_DIR = '../attendance-management'
+        FRONTEND_REPO = 'https://github.com/oumaymawerfelli/pfe_attendance_management_front.git'
+        FRONTEND_DIR = '../pfe_attendance_management_front'
+
     }
 
     stages {
