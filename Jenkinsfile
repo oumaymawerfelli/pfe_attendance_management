@@ -2,35 +2,54 @@ pipeline {
     agent any
 
     tools {
-        maven 'M2_HOME'
-        jdk 'JAVA_HOME'
+        maven 'Maven3'
+        jdk 'JDK17'
     }
 
     environment {
         IMAGE_NAME = 'mon-backend'
         APP_PORT = '8080'
         ENV_FILE = '/etc/pfe/.env'
+        FRONTEND_REPO = 'https://github.com/oumaymawerfelli/attendance-management.git'
+        FRONTEND_DIR = '../attendance-management'
     }
 
     stages {
 
-        stage('1 Checkout') {
+        stage('1. Checkout Backend') {
             steps {
-                echo ' Récupération du code depuis GitHub...'
+                echo 'Recuperation du code backend depuis GitHub...'
                 checkout scm
             }
         }
 
-        stage('2 Maven Compile') {
+        stage('2. Checkout Frontend') {
             steps {
-                echo ' Compilation Maven...'
+                echo 'Recuperation du code frontend depuis GitHub...'
+                sh '''
+                    if [ -d "${FRONTEND_DIR}" ]; then
+                        echo "Mise a jour du frontend existant..."
+                        cd ${FRONTEND_DIR}
+                        git pull
+                    else
+                        echo "Clonage du frontend..."
+                        cd ..
+                        git clone ${FRONTEND_REPO}
+                    fi
+                '''
+            }
+        }
+
+        stage('3. Maven Compile') {
+            steps {
+                echo 'Compilation Maven (backend)...'
                 sh 'mvn clean compile -B'
             }
         }
 
-        stage('3 Tests unitaires') {
+        stage('4. Tests unitaires') {
             steps {
-                echo ' Lancement des tests (mode tolérant)...'
+                echo 'Lancement des tests (mode tolerant)...'
                 sh 'mvn test -B -fae || true'
             }
             post {
@@ -40,73 +59,77 @@ pipeline {
             }
         }
 
-        stage('4 Package JAR') {
+        stage('5. Package JAR') {
             steps {
-                echo ' Création du JAR...'
+                echo 'Creation du JAR...'
                 sh 'mvn package -DskipTests -B'
                 archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
 
-        stage('5 Docker Build') {
+        stage('6. Preparer .env') {
             steps {
-                echo ' Construction de l image Docker...'
-                sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} -t ${IMAGE_NAME}:latest ."
-            }
-        }
-
-        stage('6 Préparer .env') {
-            steps {
-                echo ' Récupération du fichier .env...'
+                echo 'Recuperation du fichier .env depuis la VM...'
                 sh '''
                     if [ ! -f ${ENV_FILE} ]; then
-                        echo " ERREUR: ${ENV_FILE} introuvable sur la VM !"
+                        echo "ERREUR: ${ENV_FILE} introuvable sur la VM !"
+                        echo "Creer avec: sudo nano /etc/pfe/.env"
                         exit 1
                     fi
                     cp ${ENV_FILE} .env
-                    echo " Fichier .env copié dans le workspace"
+                    echo "Fichier .env copie dans le workspace"
                 '''
             }
         }
 
-        stage('7 Deploy avec docker-compose') {
+        stage('7. Deploy avec docker-compose') {
             steps {
-                echo ' Déploiement avec docker-compose...'
+                echo 'Deploiement complet (backend + frontend + MySQL)...'
                 sh '''
-                    # Arrêter les anciens conteneurs (sans toucher au volume MySQL)
                     docker-compose down --remove-orphans || true
-
-                    # Lancer la nouvelle version
-                    docker-compose up -d --no-build
-
-                    # Attendre que tout démarre
-                    echo " Attente démarrage des conteneurs..."
-                    sleep 20
-
-                    # Vérifier
+                    docker-compose up -d --build
+                    echo "Attente demarrage des conteneurs (30s)..."
+                    sleep 30
                     docker-compose ps
                 '''
             }
         }
 
-        stage('8 Health Check') {
+        stage('8. Health Check Backend') {
             steps {
-                echo ' Vérification de la santé du backend...'
+                echo 'Verification du backend...'
                 sh '''
-                    # Attendre que le backend réponde (max 2 minutes)
                     for i in $(seq 1 24); do
-                        if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ | grep -qE "200|401|403"; then
-                            echo " Backend répond !"
-                            curl -s -o /dev/null -w "Code HTTP: %{http_code}\n" http://localhost:8080/
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ || echo "000")
+                        if echo "$STATUS" | grep -qE "200|401|403"; then
+                            echo "Backend repond avec code: $STATUS"
                             exit 0
                         fi
-                        echo " Tentative $i/24... (5s)"
+                        echo "Tentative $i/24 (code: $STATUS)..."
                         sleep 5
                     done
-
-                    echo "Backend ne répond pas après 2 minutes"
-                    docker-compose logs --tail=50 backend-app
+                    echo "Backend ne repond pas"
+                    docker-compose logs --tail=30 backend-app
                     exit 1
+                '''
+            }
+        }
+
+        stage('9. Health Check Frontend') {
+            steps {
+                echo 'Verification du frontend...'
+                sh '''
+                    for i in $(seq 1 12); do
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4200/ || echo "000")
+                        if [ "$STATUS" = "200" ]; then
+                            echo "Frontend repond avec code: $STATUS"
+                            exit 0
+                        fi
+                        echo "Tentative $i/12 (code: $STATUS)..."
+                        sleep 5
+                    done
+                    echo "Frontend ne repond pas, mais on continue"
+                    docker-compose logs --tail=20 frontend-app
                 '''
             }
         }
@@ -114,27 +137,27 @@ pipeline {
 
     post {
         success {
-            echo '''
-             ===============================================
-                DÉPLOIEMENT RÉUSSI !
-
-                Backend : http://192.168.33.10:8080
-                Frontend: http://192.168.33.10:4200
-
-               Build #''' + "${BUILD_NUMBER}" + '''
-            ==============================================='''
+            echo '==============================================='
+            echo 'DEPLOIEMENT COMPLET REUSSI !'
+            echo ''
+            echo 'Frontend: http://192.168.33.10:4200'
+            echo 'Backend : http://192.168.33.10:8080'
+            echo 'MySQL   : 192.168.33.10:3306'
+            echo '==============================================='
         }
         failure {
-            echo ' ÉCHEC du déploiement - voir les logs'
+            echo 'ECHEC du deploiement - voir les logs'
             sh '''
-                echo "=== Logs des conteneurs ==="
+                echo "=== Etat des conteneurs ==="
                 docker-compose ps || true
-                docker-compose logs --tail=30 || true
+                echo "=== Logs backend ==="
+                docker-compose logs --tail=30 backend-app || true
+                echo "=== Logs frontend ==="
+                docker-compose logs --tail=30 frontend-app || true
             '''
         }
         always {
-            echo ' Pipeline terminé'
-            // Nettoyer le .env du workspace après le déploiement (sécurité)
+            echo 'Nettoyage du .env du workspace (securite)...'
             sh 'rm -f .env || true'
         }
     }
