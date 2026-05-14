@@ -33,7 +33,7 @@ public class UserResponseDTO {
     private LocalDate hireDate;
     private ContractType contractType;
     private LocalDate contractEndDate;
-    private Double baseSalary;
+
     private Double housingAllowance;
     private Integer evaluationScore;
     private LocalDate evaluationDate;

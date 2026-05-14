@@ -61,6 +61,9 @@ public class AuthenticationService {
         // STEP 7: Return response to controller
         return buildRegistrationResponse(savedUser);
     }
+
+
+
     // Checking for duplicates (The Helper Methods)
     private void validateUniqueConstraints(RegisterRequestDTO request) {
         // Check if email already exists in database
@@ -156,39 +159,35 @@ public class AuthenticationService {
 
      //Approve a pending self‑registration and send the activation email.
     //Approve Registration (Admin clicks "Approve")
-    public RegistrationResponseDTO approveRegistration(Long userId) {
-        // STEP 1: Find the user in database
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+     public RegistrationResponseDTO approveRegistration(Long userId) {
+         User user = userRepository.findById(userId)
+                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // STEP 2: Check if already activated
-        if (user.isEnabled() && !user.isRegistrationPending()) {
-            throw new BusinessException("Account already activated");
-        }
-        // STEP 3: Check if token needs to be regenerated
-        if (user.getActivationToken() == null ||
-                user.getActivationTokenExpiry() == null ||
-                user.getActivationTokenExpiry().isBefore(LocalDateTime.now())) {
+         // Check if already approved (not pending AND already enabled)
+         if (!user.isRegistrationPending()) {
+             throw new BusinessException("Registration already processed");
+         }
 
-            // Token is missing or expired - create new one
-            String token = jwtService.generateActivationToken(user);
-            user.setActivationToken(token);
-            user.setActivationTokenExpiry(LocalDateTime.now().plusDays(7));
-        }
-        // STEP 4: Update user status
-        user.setRegistrationPending(false);// No longer pending
-        user.setActive(true);  // Mark as active
-        userRepository.save(user);
+         // Generate fresh activation token
+         String token = jwtService.generateActivationToken(user);
+         user.setActivationToken(token);
+         user.setActivationTokenExpiry(LocalDateTime.now().plusDays(7));
 
-        // STEP 5: Send activation email to user (using the method with 2 parameters)
-        emailService.sendActivationReminderEmail(user.getEmail(), user.getActivationToken());
+         // Mark as approved but NOT yet enabled (user must activate via email)
+         user.setRegistrationPending(false);
+         user.setActive(true);
+         // DO NOT set enabled(true) here — only set after user sets password
 
-        // STEP 6: Build and return response
-        RegistrationResponseDTO dto = buildRegistrationResponse(user);
-        dto.setMessage("Registration approved. Activation email sent.");
-        dto.setActivationEmailSent(true);
-        return dto;
-    }
+         userRepository.save(user);
+
+         // Send activation email
+         emailService.sendActivationReminderEmail(user.getEmail(), user.getActivationToken());
+
+         RegistrationResponseDTO dto = buildRegistrationResponse(user);
+         dto.setMessage("Registration approved. Activation email sent.");
+         dto.setActivationEmailSent(true);
+         return dto;
+     }
     // ==================== LOGIN ====================
 
     public JwtResponseDTO authenticate(LoginRequestDTO request) {
@@ -273,17 +272,23 @@ public class AuthenticationService {
     //User clicks activation link, frontend checks if token is still valid before showing the activation form. This prevents showing a form that will fail if the token is expired.
     public boolean validateActivationTokenApi(String token) {
         try {
-            // Try to get user from token
-            User user = getValidUserFromActivationToken(token);
-            // Check if user exists, not enabled, and token not expired
-            return user != null && !user.isEnabled()
-                    && user.getActivationTokenExpiry().isAfter(LocalDateTime.now());
+            if (!jwtService.isTokenValid(token) || !jwtService.isActivationToken(token)) {
+                return false;
+            }
+
+            User user = userRepository.findByActivationToken(token).orElse(null);
+
+            if (user == null) return false;
+            if (user.isEnabled()) return false;  // Already activated
+            if (user.getActivationTokenExpiry() == null) return false;
+
+            return user.getActivationTokenExpiry().isAfter(LocalDateTime.now());
+
         } catch (Exception e) {
-            // Any error means token is invalid
+            log.warn("Token validation failed: {}", e.getMessage());
             return false;
         }
     }
-
   //Send new activation email if user lost the first one or it expired.
   // User enters their email, we check if they exist and are not activated,
   // then we generate a new token and send the email again.

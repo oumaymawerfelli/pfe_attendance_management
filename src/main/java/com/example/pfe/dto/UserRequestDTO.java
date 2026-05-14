@@ -66,9 +66,7 @@ public class UserRequestDTO {
 
     private LocalDate contractEndDate;
 
-    @NotNull(message = "Base salary is required")
-    @Positive(message = "Base salary must be positive")
-    private Double baseSalary;
+
 
     @PositiveOrZero(message = "Housing allowance cannot be negative")
     private Double housingAllowance;

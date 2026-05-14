@@ -2,7 +2,11 @@ package com.example.pfe.dto;
 
 import lombok.*;
 
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class LeaveBalanceDTO {
 
     private Integer year;
@@ -10,12 +14,12 @@ public class LeaveBalanceDTO {
     // Annual
     private Double annualTotal;
     private Double annualTaken;
-    private Double annualRemaining;   // Calculated: total - taken
+    private Double annualRemaining;   // calculated: total - taken
 
     // Sick
     private Double sickTotal;
     private Double sickTaken;
-    private Double sickRemaining;
+    private Double sickRemaining;     // calculated: total - taken  ← was missing
 
     // Unpaid
     private Double unpaidTotal;

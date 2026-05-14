@@ -62,7 +62,7 @@ public class User {
 
 
 
-   private Double baseSalary;// Monthly base salary (in local currency)
+
    private Double housingAllowance;// Monthly housing allowance/benefit
 
    private Integer evaluationScore;// Latest performance rating (e.g., 1-5 scale)

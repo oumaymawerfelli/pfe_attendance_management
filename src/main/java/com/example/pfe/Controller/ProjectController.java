@@ -1,9 +1,7 @@
 package com.example.pfe.Controller;
 
 import com.example.pfe.Service.ProjectService;
-import com.example.pfe.dto.ProjectRequestDTO;
-import com.example.pfe.dto.ProjectResponseDTO;
-import com.example.pfe.dto.TeamMemberDTO;
+import com.example.pfe.dto.*;
 import com.example.pfe.enums.ProjectStatus;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -43,9 +41,16 @@ public class ProjectController {
     @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER') or @securityService.isProjectManager(#id)")
     public ResponseEntity<ProjectResponseDTO> updateStatus(
             @PathVariable Long id,
-            @RequestParam ProjectStatus status) {
-        return ResponseEntity.ok(projectService.updateProjectStatus(id, status));
+            @Valid @RequestBody StatusUpdateRequestDTO request) {
+        return ResponseEntity.ok(projectService.updateProjectStatus(id, request));
     }
+
+    @GetMapping("/{id}/status-history")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<ProjectStatusHistoryDTO>> getStatusHistory(@PathVariable Long id) {
+        return ResponseEntity.ok(projectService.getStatusHistory(id));
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER')")
     public ResponseEntity<ProjectResponseDTO> updateProject(

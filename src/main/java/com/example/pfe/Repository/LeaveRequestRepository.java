@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import com.example.pfe.enums.LeaveStatus;
 
 import java.time.LocalDate;
 import java.util.Collection;
@@ -21,6 +22,8 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     List<LeaveRequest> findByStatusOrderByCreatedAtAsc(LeaveStatus status);
 
     List<LeaveRequest> findAllByOrderByCreatedAtDesc();
+    long countByStatusAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
+            LeaveStatus status, LocalDate endRef, LocalDate startRef);
 
     @Query("""
         SELECT COUNT(lr) > 0 FROM LeaveRequest lr

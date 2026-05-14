@@ -20,6 +20,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
     boolean existsByNationalId(String nationalId);
     boolean existsByUsername(String username);
+    long countByActiveTrueAndDepartment(Department department);
 
     // Ajoutez cette méthode pour trouver par token d'activation
     Optional<User> findByActivationToken(String activationToken);
@@ -98,4 +99,5 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')) OR " +
             "LOWER(u.department) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     Page<User> searchByKeyword(@Param("keyword") String keyword, Pageable pageable);
+    long countByActiveTrue();
 }

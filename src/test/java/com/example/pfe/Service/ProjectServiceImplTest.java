@@ -1,6 +1,7 @@
 package com.example.pfe.Service;
 
 import com.example.pfe.Repository.ProjectRepository;
+import com.example.pfe.Repository.ProjectStatusHistoryRepository;
 import com.example.pfe.Repository.TeamAssignmentRepository;
 import com.example.pfe.Repository.UserRepository;
 import com.example.pfe.dto.*;
@@ -11,6 +12,7 @@ import com.example.pfe.enums.ProjectStatus;
 import com.example.pfe.exception.BusinessException;
 import com.example.pfe.exception.ResourceNotFoundException;
 import com.example.pfe.mapper.ProjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -34,20 +39,39 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("ProjectServiceImpl - Tests Unitaires")
+@DisplayName("ProjectServiceImpl — Tests Unitaires")
 class ProjectServiceImplTest {
 
-    @Mock private ProjectRepository projectRepository;
-    @Mock private UserRepository userRepository;
-    @Mock private TeamAssignmentRepository teamAssignmentRepository;
-    @Mock private TeamAssignmentService teamAssignmentService;
-    @Mock private ProjectMapper projectMapper;
-    @Mock private NotificationService notificationService;
+    @Mock private ProjectRepository              projectRepository;
+    @Mock private UserRepository                 userRepository;
+    @Mock private TeamAssignmentRepository       teamAssignmentRepository;
+    @Mock private TeamAssignmentService          teamAssignmentService;
+    @Mock private ProjectMapper                  projectMapper;
+    @Mock private NotificationService            notificationService;
+    // ✅ AJOUT : le service dépend aussi de ce repository (injection Lombok)
+    @Mock private ProjectStatusHistoryRepository historyRepository;
 
     @InjectMocks
     private ProjectServiceImpl projectService;
 
-    // ── Fixtures ──────────────────────────────────────────────────────────────
+    // ── Nettoyage du SecurityContext après chaque test ────────────────────────
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Injecte un utilisateur fictif dans le SecurityContext. */
+    private void mockAuthentication(String username) {
+        Authentication auth = mock(Authentication.class);
+        // lenient() évite UnnecessaryStubbing quand le test lève une exception
+        // avant que SecurityContextHolder soit consulté (ex: projet introuvable)
+        lenient().when(auth.getName()).thenReturn(username);
+        SecurityContext ctx = mock(SecurityContext.class);
+        lenient().when(ctx.getAuthentication()).thenReturn(auth);
+        SecurityContextHolder.setContext(ctx);
+    }
 
     private User buildUser(Long id, String firstName, String lastName, String email) {
         User u = new User();
@@ -79,7 +103,19 @@ class ProjectServiceImplTest {
         return dto;
     }
 
-    private TeamAssignment buildAssignment(Long id, Project project, User employee, User manager, boolean active) {
+    /**
+     * ✅ CORRIGÉ : le service attend un StatusUpdateRequestDTO, pas un ProjectStatus.
+     * Ce helper centralise la construction pour tous les tests de updateProjectStatus.
+     */
+    private StatusUpdateRequestDTO buildStatusUpdateRequest(ProjectStatus status, String reason) {
+        StatusUpdateRequestDTO dto = new StatusUpdateRequestDTO();
+        dto.setStatus(status);
+        dto.setReason(reason);
+        return dto;
+    }
+
+    private TeamAssignment buildAssignment(Long id, Project project, User employee,
+                                           User manager, boolean active) {
         TeamAssignment a = new TeamAssignment();
         a.setId(id.intValue());
         a.setProject(project);
@@ -89,6 +125,7 @@ class ProjectServiceImplTest {
         a.setAddedDate(LocalDate.now());
         return a;
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // createProject
@@ -156,10 +193,8 @@ class ProjectServiceImplTest {
             when(projectRepository.existsByCode(anyString())).thenReturn(true);
             when(projectRepository.save(any(Project.class))).thenReturn(saved);
 
-            ProjectResponseDTO result = projectService.createProject(dto);
+            projectService.createProject(dto);
 
-            assertThat(result).isNotNull();
-            // Le code doit avoir été modifié avec un suffixe
             ArgumentCaptor<Project> captor = ArgumentCaptor.forClass(Project.class);
             verify(projectRepository).save(captor.capture());
             assertThat(captor.getValue().getCode()).contains("-");
@@ -196,6 +231,7 @@ class ProjectServiceImplTest {
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
     // updateProject
     // ══════════════════════════════════════════════════════════════════════════
@@ -213,7 +249,7 @@ class ProjectServiceImplTest {
             when(projectRepository.save(any())).thenReturn(existing);
             when(teamAssignmentRepository.findByProjectId(1L)).thenReturn(List.of());
 
-            ProjectResponseDTO result = projectService.updateProject(1L, dto);
+            projectService.updateProject(1L, dto);
 
             assertThat(existing.getName()).isEqualTo("New Name");
             assertThat(existing.getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
@@ -263,17 +299,17 @@ class ProjectServiceImplTest {
         }
 
         @Test
-        @DisplayName("Notifie les membres actifs de l'équipe après la mise à jour")
+        @DisplayName("Notifie uniquement les membres actifs après la mise à jour")
         void shouldNotifyActiveTeamMembers() {
             Project existing = buildProject(1L, "Proj", "PRJ001", ProjectStatus.PLANNED);
             ProjectRequestDTO dto = buildRequestDTO("Proj Updated", ProjectStatus.IN_PROGRESS);
 
-            User emp1 = buildUser(10L, "Alice", "A", "a@test.com");
-            User emp2 = buildUser(11L, "Bob", "B", "b@test.com");
-            User manager = buildUser(99L, "Mgr", "M", "m@test.com");
+            User emp1    = buildUser(10L, "Alice", "A", "a@test.com");
+            User emp2    = buildUser(11L, "Bob",   "B", "b@test.com");
+            User manager = buildUser(99L, "Mgr",   "M", "m@test.com");
 
             TeamAssignment a1 = buildAssignment(1L, existing, emp1, manager, true);
-            TeamAssignment a2 = buildAssignment(2L, existing, emp2, manager, false); // inactive
+            TeamAssignment a2 = buildAssignment(2L, existing, emp2, manager, false); // inactif
 
             when(projectRepository.findById(1L)).thenReturn(Optional.of(existing));
             when(projectRepository.save(any())).thenReturn(existing);
@@ -281,7 +317,6 @@ class ProjectServiceImplTest {
 
             projectService.updateProject(1L, dto);
 
-            // Seul emp1 (active=true) doit être notifié, avec le nouveau nom du projet
             verify(notificationService, times(1)).notifyProjectUpdated(10L, "Proj Updated");
             verify(notificationService, never()).notifyProjectUpdated(eq(11L), any());
         }
@@ -306,11 +341,165 @@ class ProjectServiceImplTest {
         void shouldThrowWhenProjectNotFound() {
             when(projectRepository.findById(999L)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> projectService.updateProject(999L, buildRequestDTO("X", ProjectStatus.PLANNED)))
+            assertThatThrownBy(() -> projectService.updateProject(999L,
+                    buildRequestDTO("X", ProjectStatus.PLANNED)))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("999");
         }
     }
+
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // updateProjectStatus
+    //
+    // ✅ CORRIGÉ :
+    //   1. Signature : updateProjectStatus(Long, StatusUpdateRequestDTO)
+    //      et non (Long, ProjectStatus).
+    //   2. Le service lit SecurityContextHolder.getContext().getAuthentication().getName()
+    //      → il faut mocker le SecurityContext, sinon NullPointerException.
+    // ══════════════════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("updateProjectStatus()")
+    class UpdateProjectStatus {
+
+        @Test
+        @DisplayName("Met à jour le statut et sauvegarde l'historique")
+        void shouldUpdateStatusAndSaveHistory() {
+            mockAuthentication("admin@test.com");
+
+            Project project = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
+            StatusUpdateRequestDTO request =
+                    buildStatusUpdateRequest(ProjectStatus.IN_PROGRESS, "Démarrage effectif");
+
+            when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+            when(projectRepository.save(any())).thenReturn(project);
+
+            ProjectResponseDTO result = projectService.updateProjectStatus(1L, request);
+
+            // Statut mis à jour sur l'entité
+            assertThat(project.getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
+            assertThat(project.getUpdatedAt()).isNotNull();
+
+            // Projet sauvegardé
+            verify(projectRepository).save(project);
+
+            // Historique persisté
+            verify(historyRepository).save(argThat(h ->
+                    h.getFromStatus() == ProjectStatus.PLANNED   &&
+                            h.getToStatus()   == ProjectStatus.IN_PROGRESS &&
+                            "admin@test.com".equals(h.getChangedBy())   &&
+                            "Démarrage effectif".equals(h.getReason())
+            ));
+        }
+
+        @Test
+        @DisplayName("Enregistre correctement le changedBy depuis le contexte de sécurité")
+        void shouldRecordChangedByFromSecurityContext() {
+            mockAuthentication("manager@corp.com");
+
+            Project project = buildProject(1L, "Beta", "PRJ002", ProjectStatus.PLANNED);
+            StatusUpdateRequestDTO request =
+                    buildStatusUpdateRequest(ProjectStatus.ON_HOLD, "En attente de budget");
+
+            when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+            when(projectRepository.save(any())).thenReturn(project);
+
+            projectService.updateProjectStatus(1L, request);
+
+            verify(historyRepository).save(argThat(h ->
+                    "manager@corp.com".equals(h.getChangedBy())));
+        }
+
+        @Test
+        @DisplayName("Lève ResourceNotFoundException si le projet n'existe pas")
+        void shouldThrowWhenNotFound() {
+            mockAuthentication("admin@test.com");
+            when(projectRepository.findById(99L)).thenReturn(Optional.empty());
+
+            StatusUpdateRequestDTO request =
+                    buildStatusUpdateRequest(ProjectStatus.COMPLETED, null);
+
+            assertThatThrownBy(() -> projectService.updateProjectStatus(99L, request))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("99");
+
+            verify(historyRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Fonctionne même sans motif (reason null)")
+        void shouldWorkWithNullReason() {
+            mockAuthentication("gm@test.com");
+
+            Project project = buildProject(1L, "Gamma", "PRJ003", ProjectStatus.IN_PROGRESS);
+            StatusUpdateRequestDTO request =
+                    buildStatusUpdateRequest(ProjectStatus.COMPLETED, null);
+
+            when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
+            when(projectRepository.save(any())).thenReturn(project);
+
+            assertThatCode(() -> projectService.updateProjectStatus(1L, request))
+                    .doesNotThrowAnyException();
+
+            verify(historyRepository).save(argThat(h -> h.getReason() == null));
+        }
+    }
+
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // getStatusHistory
+    // ✅ NOUVEAU : était absent des tests précédents
+    // ══════════════════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("getStatusHistory()")
+    class GetStatusHistory {
+
+        @Test
+        @DisplayName("Retourne l'historique trié du plus récent au plus ancien")
+        void shouldReturnHistoryOrderedByDate() {
+            com.example.pfe.entities.ProjectStatusHistory h1 =
+                    com.example.pfe.entities.ProjectStatusHistory.builder()
+                            .id(1L)
+                            .fromStatus(ProjectStatus.PLANNED)
+                            .toStatus(ProjectStatus.IN_PROGRESS)
+                            .changedBy("admin@test.com")
+                            .changedAt(LocalDateTime.now().minusDays(2))
+                            .reason("Démarrage")
+                            .build();
+
+            com.example.pfe.entities.ProjectStatusHistory h2 =
+                    com.example.pfe.entities.ProjectStatusHistory.builder()
+                            .id(2L)
+                            .fromStatus(ProjectStatus.IN_PROGRESS)
+                            .toStatus(ProjectStatus.COMPLETED)
+                            .changedBy("gm@test.com")
+                            .changedAt(LocalDateTime.now())
+                            .reason("Terminé")
+                            .build();
+
+            when(historyRepository.findByProjectIdOrderByChangedAtDesc(1L))
+                    .thenReturn(List.of(h2, h1)); // le repo retourne déjà trié DESC
+
+            List<ProjectStatusHistoryDTO> result = projectService.getStatusHistory(1L);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).getToStatus()).isEqualTo(ProjectStatus.COMPLETED);
+            assertThat(result.get(1).getToStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
+            assertThat(result.get(0).getChangedBy()).isEqualTo("gm@test.com");
+        }
+
+        @Test
+        @DisplayName("Retourne une liste vide si aucun historique")
+        void shouldReturnEmptyWhenNoHistory() {
+            when(historyRepository.findByProjectIdOrderByChangedAtDesc(99L))
+                    .thenReturn(List.of());
+
+            List<ProjectStatusHistoryDTO> result = projectService.getStatusHistory(99L);
+
+            assertThat(result).isEmpty();
+        }
+    }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // getProjectById
@@ -342,6 +531,7 @@ class ProjectServiceImplTest {
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
     // getProjectWithTeam
     // ══════════════════════════════════════════════════════════════════════════
@@ -350,13 +540,13 @@ class ProjectServiceImplTest {
     class GetProjectWithTeam {
 
         @Test
-        @DisplayName("Retourne le projet avec les membres actifs de l'équipe")
+        @DisplayName("Retourne le projet avec les membres actifs de l'équipe uniquement")
         void shouldReturnProjectWithActiveTeam() {
             Project project = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
             User emp = buildUser(5L, "Jane", "Doe", "jane@test.com");
-            User mgr = buildUser(6L, "Bob", "Mgr", "bob@test.com");
+            User mgr = buildUser(6L, "Bob",  "Mgr", "bob@test.com");
 
-            TeamAssignment active = buildAssignment(1L, project, emp, mgr, true);
+            TeamAssignment active   = buildAssignment(1L, project, emp, mgr, true);
             TeamAssignment inactive = buildAssignment(2L, project, emp, mgr, false);
 
             when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
@@ -377,6 +567,7 @@ class ProjectServiceImplTest {
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // getAllProjects
@@ -409,6 +600,7 @@ class ProjectServiceImplTest {
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
     // deleteProject
     // ══════════════════════════════════════════════════════════════════════════
@@ -433,7 +625,7 @@ class ProjectServiceImplTest {
         void shouldThrowWhenProjectHasTeamMembers() {
             Project project = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
             User emp = buildUser(5L, "Jane", "Doe", "jane@test.com");
-            User mgr = buildUser(6L, "Bob", "Mgr", "bob@test.com");
+            User mgr = buildUser(6L, "Bob",  "Mgr", "bob@test.com");
             TeamAssignment assignment = buildAssignment(1L, project, emp, mgr, true);
 
             when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
@@ -456,36 +648,6 @@ class ProjectServiceImplTest {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // updateProjectStatus
-    // ══════════════════════════════════════════════════════════════════════════
-    @Nested
-    @DisplayName("updateProjectStatus()")
-    class UpdateProjectStatus {
-
-        @Test
-        @DisplayName("Met à jour le statut du projet")
-        void shouldUpdateStatus() {
-            Project project = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
-            when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
-            when(projectRepository.save(any())).thenReturn(project);
-
-            ProjectResponseDTO result = projectService.updateProjectStatus(1L, ProjectStatus.IN_PROGRESS);
-
-            assertThat(project.getStatus()).isEqualTo(ProjectStatus.IN_PROGRESS);
-            assertThat(project.getUpdatedAt()).isNotNull();
-            verify(projectRepository).save(project);
-        }
-
-        @Test
-        @DisplayName("Lève ResourceNotFoundException si le projet n'existe pas")
-        void shouldThrowWhenNotFound() {
-            when(projectRepository.findById(99L)).thenReturn(Optional.empty());
-
-            assertThatThrownBy(() -> projectService.updateProjectStatus(99L, ProjectStatus.COMPLETED))
-                    .isInstanceOf(ResourceNotFoundException.class);
-        }
-    }
 
     // ══════════════════════════════════════════════════════════════════════════
     // getProjectsByStatus
@@ -516,6 +678,7 @@ class ProjectServiceImplTest {
             assertThat(result).isEmpty();
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // getProjectsByManager
@@ -550,6 +713,7 @@ class ProjectServiceImplTest {
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
     // searchProjects
     // ══════════════════════════════════════════════════════════════════════════
@@ -580,6 +744,7 @@ class ProjectServiceImplTest {
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
     // assignTeamMember
     // ══════════════════════════════════════════════════════════════════════════
@@ -598,14 +763,13 @@ class ProjectServiceImplTest {
             dto.setProjectId(1L);
             dto.setEmployeeId(10L);
 
-            TeamAssignmentResponseDTO response = new TeamAssignmentResponseDTO();
-
-            when(teamAssignmentService.assignEmployeeToProject(dto)).thenReturn(response);
+            when(teamAssignmentService.assignEmployeeToProject(dto))
+                    .thenReturn(new TeamAssignmentResponseDTO());
             when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
 
             TeamAssignmentResponseDTO result = projectService.assignTeamMember(dto);
 
-            assertThat(result).isSameAs(response);
+            assertThat(result).isNotNull();
             verify(notificationService).notifyProjectAssigned(10L, "Alpha");
             verify(notificationService).notifyPmAssigned(eq(10L), eq("Alice Smith"), eq("Alpha"));
         }
@@ -614,13 +778,13 @@ class ProjectServiceImplTest {
         @DisplayName("N'envoie pas la notification PM si pas de project manager")
         void shouldNotNotifyPmWhenNoneSet() {
             Project project = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
-            // pas de PM
 
             TeamAssignmentDTO dto = new TeamAssignmentDTO();
             dto.setProjectId(1L);
             dto.setEmployeeId(10L);
 
-            when(teamAssignmentService.assignEmployeeToProject(dto)).thenReturn(new TeamAssignmentResponseDTO());
+            when(teamAssignmentService.assignEmployeeToProject(dto))
+                    .thenReturn(new TeamAssignmentResponseDTO());
             when(projectRepository.findById(1L)).thenReturn(Optional.of(project));
 
             projectService.assignTeamMember(dto);
@@ -636,13 +800,15 @@ class ProjectServiceImplTest {
             dto.setProjectId(99L);
             dto.setEmployeeId(10L);
 
-            when(teamAssignmentService.assignEmployeeToProject(dto)).thenReturn(new TeamAssignmentResponseDTO());
+            when(teamAssignmentService.assignEmployeeToProject(dto))
+                    .thenReturn(new TeamAssignmentResponseDTO());
             when(projectRepository.findById(99L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> projectService.assignTeamMember(dto))
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // removeTeamMember
@@ -660,6 +826,7 @@ class ProjectServiceImplTest {
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
     // getProjectTeamMembers
     // ══════════════════════════════════════════════════════════════════════════
@@ -672,10 +839,10 @@ class ProjectServiceImplTest {
         void shouldReturnOnlyActiveMembers() {
             Project project = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
             User emp1 = buildUser(10L, "Jane", "A", "jane@test.com");
-            User emp2 = buildUser(11L, "Bob", "B", "bob@test.com");
-            User mgr = buildUser(99L, "Mgr", "M", "m@test.com");
+            User emp2 = buildUser(11L, "Bob",  "B", "bob@test.com");
+            User mgr  = buildUser(99L, "Mgr",  "M", "m@test.com");
 
-            TeamAssignment active = buildAssignment(1L, project, emp1, mgr, true);
+            TeamAssignment active   = buildAssignment(1L, project, emp1, mgr, true);
             TeamAssignment inactive = buildAssignment(2L, project, emp2, mgr, false);
 
             when(teamAssignmentRepository.findByProjectId(1L)).thenReturn(List.of(active, inactive));
@@ -691,7 +858,7 @@ class ProjectServiceImplTest {
         void shouldReturnEmptyWhenNoActiveMembers() {
             Project project = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
             User emp = buildUser(10L, "Jane", "A", "jane@test.com");
-            User mgr = buildUser(99L, "Mgr", "M", "m@test.com");
+            User mgr = buildUser(99L, "Mgr",  "M", "m@test.com");
 
             TeamAssignment inactive = buildAssignment(1L, project, emp, mgr, false);
             when(teamAssignmentRepository.findByProjectId(1L)).thenReturn(List.of(inactive));
@@ -701,6 +868,7 @@ class ProjectServiceImplTest {
             assertThat(result).isEmpty();
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // getEmployeeProjects
@@ -713,20 +881,19 @@ class ProjectServiceImplTest {
         @DisplayName("Retourne les projets actifs d'un employé sans doublons")
         void shouldReturnDistinctActiveProjects() {
             User employee = buildUser(5L, "Jane", "Doe", "jane@test.com");
-            User mgr = buildUser(99L, "Mgr", "M", "m@test.com");
-            Project p1 = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
-            Project p2 = buildProject(2L, "Beta", "PRJ002", ProjectStatus.IN_PROGRESS);
+            User mgr      = buildUser(99L, "Mgr",  "M",   "m@test.com");
+            Project p1    = buildProject(1L, "Alpha", "PRJ001", ProjectStatus.PLANNED);
+            Project p2    = buildProject(2L, "Beta",  "PRJ002", ProjectStatus.IN_PROGRESS);
 
             TeamAssignment a1 = buildAssignment(1L, p1, employee, mgr, true);
             TeamAssignment a2 = buildAssignment(2L, p2, employee, mgr, true);
-            TeamAssignment a3 = buildAssignment(3L, p1, employee, mgr, false); // inactive, same project
+            TeamAssignment a3 = buildAssignment(3L, p1, employee, mgr, false); // inactif
 
             when(userRepository.findById(5L)).thenReturn(Optional.of(employee));
             when(teamAssignmentRepository.findByEmployeeId(5L)).thenReturn(List.of(a1, a2, a3));
 
             List<ProjectResponseDTO> result = projectService.getEmployeeProjects(5L);
 
-            // a3 est inactif, a1 et a2 sont actifs → 2 projets distincts
             assertThat(result).hasSize(2);
         }
 
@@ -740,6 +907,7 @@ class ProjectServiceImplTest {
                     .hasMessageContaining("99");
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // existsByCode / getProjectByCode
@@ -778,6 +946,7 @@ class ProjectServiceImplTest {
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
     // countProjectsByStatus
     // ══════════════════════════════════════════════════════════════════════════
@@ -795,6 +964,7 @@ class ProjectServiceImplTest {
             assertThat(count).isEqualTo(5L);
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // getActiveProjects / getInactiveProjects

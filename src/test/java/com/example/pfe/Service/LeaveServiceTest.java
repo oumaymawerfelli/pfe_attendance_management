@@ -33,7 +33,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("LeaveService - Tests Unitaires")
+@DisplayName("LeaveService — Tests Unitaires")
 class LeaveServiceTest {
 
     @Mock private LeaveRequestRepository   leaveRequestRepository;
@@ -41,7 +41,7 @@ class LeaveServiceTest {
     @Mock private UserRepository           userRepository;
     @Mock private TeamAssignmentRepository teamAssignmentRepository;
     @Mock private LeaveMapper              leaveMapper;
-    @Mock private NotificationService notificationService;
+    @Mock private NotificationService      notificationService;
 
     @InjectMocks
     private LeaveService leaveService;
@@ -88,9 +88,10 @@ class LeaveServiceTest {
         dto.setLeaveType(type);
         dto.setStartDate(start);
         dto.setEndDate(end);
-        dto.setReason("Test reason");
+        dto.setReason("Test reason long enough"); // respecte @Size(min=10)
         return dto;
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // requestLeave
@@ -116,7 +117,9 @@ class LeaveServiceTest {
             when(leaveRequestRepository.save(any())).thenReturn(saved);
             when(leaveMapper.toResponseDTO(saved)).thenReturn(new LeaveResponseDTO());
 
-            LeaveResponseDTO result = leaveService.requestLeave(userId, buildRequestDTO(start, end, LeaveType.ANNUAL));
+            // ✅ CORRIGÉ : null = pas de pièce jointe (3e paramètre MultipartFile)
+            LeaveResponseDTO result = leaveService.requestLeave(
+                    userId, buildRequestDTO(start, end, LeaveType.ANNUAL), null);
 
             assertThat(result).isNotNull();
             verify(leaveRequestRepository).save(any(LeaveRequest.class));
@@ -136,7 +139,9 @@ class LeaveServiceTest {
             when(leaveRequestRepository.save(any())).thenReturn(saved);
             when(leaveMapper.toResponseDTO(saved)).thenReturn(new LeaveResponseDTO());
 
-            leaveService.requestLeave(userId, buildRequestDTO(start, end, LeaveType.UNPAID));
+            // ✅ CORRIGÉ : null = pas de pièce jointe
+            leaveService.requestLeave(
+                    userId, buildRequestDTO(start, end, LeaveType.UNPAID), null);
 
             verify(leaveBalanceRepository, never()).findByUserIdAndYear(any(), anyInt());
         }
@@ -147,8 +152,10 @@ class LeaveServiceTest {
             LocalDate start = LocalDate.now().minusDays(1);
             LocalDate end   = LocalDate.now().plusDays(1);
 
+            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
-                    leaveService.requestLeave(1L, buildRequestDTO(start, end, LeaveType.ANNUAL)))
+                    leaveService.requestLeave(
+                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("past");
         }
@@ -159,8 +166,10 @@ class LeaveServiceTest {
             LocalDate start = LocalDate.now().plusDays(3);
             LocalDate end   = LocalDate.now().plusDays(1);
 
+            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
-                    leaveService.requestLeave(1L, buildRequestDTO(start, end, LeaveType.ANNUAL)))
+                    leaveService.requestLeave(
+                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("End date must be after start date");
         }
@@ -168,15 +177,15 @@ class LeaveServiceTest {
         @Test
         @DisplayName("Lève BusinessException si la période ne contient aucun jour ouvrable")
         void shouldThrowWhenNoWorkingDays() {
-            // Trouver le prochain samedi
             LocalDate day = LocalDate.now().plusDays(1);
             while (day.getDayOfWeek().getValue() != 6) day = day.plusDays(1);
-            // Extraire dans des variables effectively final pour le lambda
             final LocalDate nextSaturday = day;
             final LocalDate nextSunday   = day.plusDays(1);
 
+            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
-                    leaveService.requestLeave(1L, buildRequestDTO(nextSaturday, nextSunday, LeaveType.ANNUAL)))
+                    leaveService.requestLeave(
+                            1L, buildRequestDTO(nextSaturday, nextSunday, LeaveType.ANNUAL), null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("no working days");
         }
@@ -189,8 +198,10 @@ class LeaveServiceTest {
 
             when(leaveRequestRepository.existsOverlappingLeave(1L, start, end)).thenReturn(true);
 
+            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
-                    leaveService.requestLeave(1L, buildRequestDTO(start, end, LeaveType.ANNUAL)))
+                    leaveService.requestLeave(
+                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("overlapping");
         }
@@ -200,19 +211,22 @@ class LeaveServiceTest {
         void shouldThrowWhenInsufficientBalance() {
             Long userId = 1L;
             LocalDate start = LocalDate.now().plusDays(1);
-            LocalDate end   = LocalDate.now().plusDays(5); // ~3 working days
-            LeaveBalance balance = buildBalance(userId, 1.0, 1.0, 15.0, 0.0); // 0 annual left
+            LocalDate end   = LocalDate.now().plusDays(5);
+            LeaveBalance balance = buildBalance(userId, 1.0, 1.0, 15.0, 0.0); // 0 annual restant
 
             when(leaveRequestRepository.existsOverlappingLeave(userId, start, end)).thenReturn(false);
             when(leaveBalanceRepository.findByUserIdAndYear(eq(userId), anyInt()))
                     .thenReturn(Optional.of(balance));
 
+            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
-                    leaveService.requestLeave(userId, buildRequestDTO(start, end, LeaveType.ANNUAL)))
+                    leaveService.requestLeave(
+                            userId, buildRequestDTO(start, end, LeaveType.ANNUAL), null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("Insufficient");
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // getMyLeaves
@@ -226,7 +240,8 @@ class LeaveServiceTest {
         void shouldReturnUserLeaves() {
             LeaveRequest req = buildRequest(1L, 1L, LeaveStatus.PENDING,
                     LocalDate.now().plusDays(1), LocalDate.now().plusDays(2));
-            when(leaveRequestRepository.findByUserIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(req));
+            when(leaveRequestRepository.findByUserIdOrderByCreatedAtDesc(1L))
+                    .thenReturn(List.of(req));
             when(leaveMapper.toResponseDTO(req)).thenReturn(new LeaveResponseDTO());
 
             List<LeaveResponseDTO> result = leaveService.getMyLeaves(1L);
@@ -234,6 +249,7 @@ class LeaveServiceTest {
             assertThat(result).hasSize(1);
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // approveLeave
@@ -248,7 +264,6 @@ class LeaveServiceTest {
             Long requestId = 1L;
             Long adminId   = 99L;
             User admin     = buildUser(adminId);
-            User employee  = buildUser(10L);
             LeaveRequest request = buildRequest(requestId, 10L, LeaveStatus.PENDING,
                     LocalDate.now().plusDays(1), LocalDate.now().plusDays(3));
             LeaveBalance balance = buildBalance(10L, 22.0, 0.0, 15.0, 0.0);
@@ -290,6 +305,7 @@ class LeaveServiceTest {
                     .isInstanceOf(ResourceNotFoundException.class);
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // rejectLeave
@@ -338,6 +354,7 @@ class LeaveServiceTest {
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
     // getPendingLeaves / getAllLeaves
     // ══════════════════════════════════════════════════════════════════════════
@@ -372,6 +389,7 @@ class LeaveServiceTest {
             assertThat(result).hasSize(1);
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // getTeamAllLeaves / getTeamPendingLeaves
@@ -425,7 +443,8 @@ class LeaveServiceTest {
                     LocalDate.now().plusDays(1), LocalDate.now().plusDays(2));
 
             when(teamAssignmentRepository.findByAssigningManagerId(pmId)).thenReturn(List.of(a));
-            when(leaveRequestRepository.findByUserIdInAndStatusOrderByCreatedAtAsc(Set.of(10L), LeaveStatus.PENDING))
+            when(leaveRequestRepository.findByUserIdInAndStatusOrderByCreatedAtAsc(
+                    Set.of(10L), LeaveStatus.PENDING))
                     .thenReturn(List.of(req));
             when(leaveMapper.toResponseDTO(req)).thenReturn(new LeaveResponseDTO());
 
@@ -434,6 +453,7 @@ class LeaveServiceTest {
             assertThat(result).hasSize(1);
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // approveLeaveByPM / rejectLeaveByPM
@@ -456,14 +476,12 @@ class LeaveServiceTest {
             Long pmId      = 5L;
             Long requestId = 1L;
             User pm        = buildUser(pmId);
-            User employee  = buildUser(10L);
 
             LeaveRequest request = buildRequest(requestId, 10L, LeaveStatus.PENDING,
                     LocalDate.now().plusDays(1), LocalDate.now().plusDays(3));
             LeaveBalance balance = buildBalance(10L, 22.0, 0.0, 15.0, 0.0);
             TeamAssignment a = buildActiveAssignment(10L);
 
-            // assertIsTeamMember check
             when(teamAssignmentRepository.findByAssigningManagerId(pmId)).thenReturn(List.of(a));
             when(leaveRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
             when(userRepository.findById(pmId)).thenReturn(Optional.of(pm));
@@ -483,7 +501,6 @@ class LeaveServiceTest {
             Long pmId      = 5L;
             Long requestId = 1L;
 
-            // Équipe du PM ne contient pas l'employé 10L
             User otherEmp = buildUser(99L);
             TeamAssignment otherA = mock(TeamAssignment.class);
             when(otherA.getActive()).thenReturn(true);
@@ -524,6 +541,7 @@ class LeaveServiceTest {
             assertThat(request.getStatus()).isEqualTo(LeaveStatus.REJECTED);
         }
     }
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // getMyBalance

@@ -1,7 +1,9 @@
 package com.example.pfe.Service;
 
+import com.example.pfe.Repository.ProjectStatusHistoryRepository;
 import com.example.pfe.dto.*;
 import com.example.pfe.entities.Project;
+import com.example.pfe.entities.ProjectStatusHistory;
 import com.example.pfe.entities.TeamAssignment;
 import com.example.pfe.entities.User;
 import com.example.pfe.enums.ProjectStatus;
@@ -15,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,7 +36,8 @@ public class ProjectServiceImpl implements ProjectService {
     private final TeamAssignmentRepository teamAssignmentRepository;
     private final TeamAssignmentService teamAssignmentService;
     private final ProjectMapper projectMapper;
-    private final NotificationService notificationService; // ← ADD THIS
+    private final NotificationService notificationService;
+    private final ProjectStatusHistoryRepository historyRepository;
 
     // ==================== CRUD OPERATIONS ====================
 
@@ -41,44 +45,38 @@ public class ProjectServiceImpl implements ProjectService {
     public ProjectResponseDTO createProject(ProjectRequestDTO requestDTO) {
         log.info("Creating project: {}......", requestDTO.getName());
 
-        // Validate dates Validates that end date isn't before start date
         if (requestDTO.getEndDate() != null &&
                 requestDTO.getStartDate() != null &&
                 requestDTO.getEndDate().isBefore(requestDTO.getStartDate())) {
             throw new BusinessException("End date cannot be before start date");
         }
 
-        // Generate project code
         String projectCode = generateProjectCode(requestDTO.getName());
 
-        // Check if code already exists Checks if a project with the generated code already exists in the database
         if (projectRepository.existsByCode(projectCode)) {
             projectCode = projectCode + "-" + System.currentTimeMillis() % 1000;
         }
 
-        // mapToEntity(requestDTO): Creates a basic Project entity from the request DTO with:
-        //Name, description, status (defaults to PLANNED if null), start/end dates
-        //Sets the (potentially modified) unique project code
-        //Sets creation and update timestamps to the current time
         Project project = mapToEntity(requestDTO);
         project.setCode(projectCode);
         project.setCreatedAt(LocalDateTime.now());
         project.setUpdatedAt(LocalDateTime.now());
 
-        // Checks if a project manager ID was provided in the request(optional)
         if (requestDTO.getProjectManagerId() != null) {
             User projectManager = userRepository.findById(requestDTO.getProjectManagerId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Project manager not found: " + requestDTO.getProjectManagerId()));
             project.setProjectManager(projectManager);
         }
-        //saves the project to the database (returns the persisted entity with generated ID)
+
         Project savedProject = projectRepository.save(project);
         log.info("Project created successfully: {} (ID: {})", projectCode, savedProject.getId());
 
         return mapToProjectResponseDTO(savedProject);
     }
-    //__________________________________________________________________________________________________//
+
+    // ==================== UPDATE PROJECT ====================
+
     @Override
     public ProjectResponseDTO updateProject(Long id, ProjectRequestDTO requestDTO) {
         log.info("Updating project ID: {}.....", id);
@@ -87,26 +85,19 @@ public class ProjectServiceImpl implements ProjectService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Project not found: " + id));
 
-        // Validate dates
-        //Validates that if both dates are provided, end date isn't before start date
         if (requestDTO.getEndDate() != null &&
                 requestDTO.getStartDate() != null &&
                 requestDTO.getEndDate().isBefore(requestDTO.getStartDate())) {
             throw new BusinessException("End date cannot be before start date");
         }
 
-        // Update fields
-        //NB:  Project code is NOT updated (remains the same as original)
         project.setName(requestDTO.getName());
         project.setDescription(requestDTO.getDescription());
         project.setStatus(requestDTO.getStatus());
         project.setStartDate(requestDTO.getStartDate());
         project.setEndDate(requestDTO.getEndDate());
-        //Always updates the updatedAt timestamp to track when changes were made
         project.setUpdatedAt(LocalDateTime.now());
 
-        // Update project manager if changed
-        //Scenario A: Changing/Adding a Project Manager
         if (requestDTO.getProjectManagerId() != null &&
                 (project.getProjectManager() == null ||
                         !project.getProjectManager().getId().equals(requestDTO.getProjectManagerId()))) {
@@ -115,17 +106,14 @@ public class ProjectServiceImpl implements ProjectService {
                             "Project manager not found: " + requestDTO.getProjectManagerId()));
             project.setProjectManager(projectManager);
             project.setAssignmentDate(LocalDateTime.now());
-
-            //Scenario B: Removing Project Manager
         } else if (requestDTO.getProjectManagerId() == null && project.getProjectManager() != null) {
             project.setProjectManager(null);
             project.setAssignmentDate(null);
-        } //Scenario C: No Change to Project Manager (either both null or same ID) → do nothing
+        }
 
         Project updatedProject = projectRepository.save(project);
         log.info("Project updated successfully: {} (ID: {})", project.getCode(), updatedProject.getId());
 
-        // Notify all team members about project update
         teamAssignmentRepository.findByProjectId(project.getId())
                 .stream()
                 .filter(a -> Boolean.TRUE.equals(a.getActive()))
@@ -136,7 +124,9 @@ public class ProjectServiceImpl implements ProjectService {
 
         return mapToProjectResponseDTO(updatedProject);
     }
-    //__________________________________________________________________________________________________//
+
+    // ==================== READ OPERATIONS ====================
+
     @Override
     @Transactional(readOnly = true)
     public ProjectResponseDTO getProjectById(Long id) {
@@ -145,33 +135,30 @@ public class ProjectServiceImpl implements ProjectService {
                         "Project not found: " + id));
         return mapToProjectResponseDTO(project);
     }
-    //__________________________________________________________________________________________________//
+
     @Override
     @Transactional(readOnly = true)
     public ProjectWithTeamDTO getProjectWithTeam(Long projectId) {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Project not found: " + projectId));
-
         List<TeamAssignment> team = teamAssignmentRepository.findByProjectId(projectId);
-
         return mapToProjectResponseWithTeam(project, team);
     }
-    //__________________________________________________________________________________________________//
+
     @Override
     @Transactional(readOnly = true)
     public Page<ProjectResponseDTO> getAllProjects(Pageable pageable) {
         log.debug("Fetching all projects with pageable: page={}, size={}, sort={}",
                 pageable.getPageNumber(), pageable.getPageSize(), pageable.getSort());
-
         Page<Project> projectPage = projectRepository.findAll(pageable);
-
         log.debug("Found {} projects on page {}",
                 projectPage.getNumberOfElements(), projectPage.getNumber());
-
-        return projectPage.map(project -> mapToProjectResponseDTO(project));
+        return projectPage.map(this::mapToProjectResponseDTO);
     }
-    //__________________________________________________________________________________________________//
+
+    // ==================== DELETE ====================
+
     @Override
     public void deleteProject(Long id) {
         log.info("Deleting project ID: {}", id);
@@ -180,7 +167,6 @@ public class ProjectServiceImpl implements ProjectService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Project not found: " + id));
 
-        // Check if project has team members
         List<TeamAssignment> teamAssignments = teamAssignmentRepository.findByProjectId(id);
         if (!teamAssignments.isEmpty()) {
             throw new BusinessException("Cannot delete project with assigned team members");
@@ -190,28 +176,53 @@ public class ProjectServiceImpl implements ProjectService {
         log.info("Project deleted: {} (ID: {})", project.getCode(), id);
     }
 
-    // ==================== BUSINESS OPERATIONS ====================
+    // ==================== STATUS MANAGEMENT ====================
 
     @Override
-    public ProjectResponseDTO updateProjectStatus(Long id, ProjectStatus status) {
+    public ProjectResponseDTO updateProjectStatus(Long id, StatusUpdateRequestDTO request) {
         Project project = projectRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Project not found: " + id));
 
-        project.setStatus(status);
+        String changedBy = SecurityContextHolder.getContext()
+                .getAuthentication().getName();
+
+        ProjectStatusHistory history = ProjectStatusHistory.builder()
+                .project(project)
+                .fromStatus(project.getStatus())
+                .toStatus(request.getStatus())
+                .changedBy(changedBy)
+                .changedAt(LocalDateTime.now())
+                .reason(request.getReason())
+                .build();
+
+        project.setStatus(request.getStatus());
         project.setUpdatedAt(LocalDateTime.now());
 
-        Project updatedProject = projectRepository.save(project);
-        log.info("Project {} status updated to {}", project.getCode(), status);
+        projectRepository.save(project);
+        historyRepository.save(history);
 
-        return mapToProjectResponseDTO(updatedProject);
+        log.info("Project {} status updated to {} by {}", project.getCode(), request.getStatus(), changedBy);
+
+        return mapToProjectResponseDTO(project);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProjectStatusHistoryDTO> getStatusHistory(Long projectId) {
+        return historyRepository.findByProjectIdOrderByChangedAtDesc(projectId)
+                .stream()
+                .map(this::mapToHistoryDTO)
+                .collect(Collectors.toList());
+    }
+
+    // ==================== BUSINESS QUERIES ====================
 
     @Override
     @Transactional(readOnly = true)
     public List<ProjectResponseDTO> getProjectsByStatus(ProjectStatus status) {
         return projectRepository.findByStatus(status).stream()
-                .map(project -> mapToProjectResponseDTO(project))
+                .map(this::mapToProjectResponseDTO)
                 .collect(Collectors.toList());
     }
 
@@ -221,9 +232,8 @@ public class ProjectServiceImpl implements ProjectService {
         User manager = userRepository.findById(managerId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Manager not found: " + managerId));
-
         return projectRepository.findByProjectManager(manager).stream()
-                .map(project -> mapToProjectResponseDTO(project))
+                .map(this::mapToProjectResponseDTO)
                 .collect(Collectors.toList());
     }
 
@@ -231,7 +241,7 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional(readOnly = true)
     public List<ProjectResponseDTO> searchProjects(String keyword) {
         return projectRepository.searchProjects(keyword).stream()
-                .map(project -> mapToProjectResponseDTO(project))
+                .map(this::mapToProjectResponseDTO)
                 .collect(Collectors.toList());
     }
 
@@ -239,7 +249,15 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional(readOnly = true)
     public List<ProjectResponseDTO> getActiveProjects() {
         return projectRepository.findActiveProjects().stream()
-                .map(project -> mapToProjectResponseDTO(project))
+                .map(this::mapToProjectResponseDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProjectResponseDTO> getInactiveProjects() {
+        return projectRepository.findInactiveProjects().stream()
+                .map(this::mapToProjectResponseDTO)
                 .collect(Collectors.toList());
     }
 
@@ -249,23 +267,35 @@ public class ProjectServiceImpl implements ProjectService {
         return projectRepository.countProjectsByStatus(status);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByCode(String code) {
+        return projectRepository.existsByCode(code);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProjectResponseDTO getProjectByCode(String code) {
+        Project project = projectRepository.findByCode(code)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Project not found with code: " + code));
+        return mapToProjectResponseDTO(project);
+    }
+
     // ==================== TEAM MANAGEMENT ====================
 
     @Override
     public TeamAssignmentResponseDTO assignTeamMember(TeamAssignmentDTO assignmentDTO) {
         TeamAssignmentResponseDTO response = teamAssignmentService.assignEmployeeToProject(assignmentDTO);
 
-        // Get project details for notifications
         Project project = projectRepository.findById(assignmentDTO.getProjectId())
                 .orElseThrow(() -> new ResourceNotFoundException("Project not found"));
 
-        // Notify the employee they've been added to the project
         notificationService.notifyProjectAssigned(
                 assignmentDTO.getEmployeeId(),
                 project.getName()
         );
 
-        // If a PM is set on the project, also notify PM assignment
         if (project.getProjectManager() != null) {
             String pmName = project.getProjectManager().getFirstName()
                     + " " + project.getProjectManager().getLastName();
@@ -287,46 +317,36 @@ public class ProjectServiceImpl implements ProjectService {
     @Override
     @Transactional(readOnly = true)
     public List<TeamMemberDTO> getProjectTeamMembers(Long projectId) {
-        List<TeamAssignment> team = teamAssignmentRepository.findByProjectId(projectId);
-
-        return team.stream()
+        return teamAssignmentRepository.findByProjectId(projectId).stream()
                 .filter(assignment -> Boolean.TRUE.equals(assignment.getActive()))
-                .map(assignment -> mapToTeamMemberDTO(assignment))
+                .map(this::mapToTeamMemberDTO)
                 .collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ProjectResponseDTO> getEmployeeProjects(Long employeeId) {
-        User employee = userRepository.findById(employeeId)
+        userRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Employee not found: " + employeeId));
 
-        // Utiliser findByEmployeeId avec filtrage manuel
-        List<TeamAssignment> assignments = teamAssignmentRepository.findByEmployeeId(employeeId)
-                .stream()
+        return teamAssignmentRepository.findByEmployeeId(employeeId).stream()
                 .filter(assignment -> Boolean.TRUE.equals(assignment.getActive()))
-                .collect(Collectors.toList());
-
-        return assignments.stream()
                 .map(TeamAssignment::getProject)
                 .distinct()
-                .map(project -> mapToProjectResponseDTO(project))
+                .map(this::mapToProjectResponseDTO)
                 .collect(Collectors.toList());
     }
 
-    // ==================== PRIVATE HELPER METHODS ====================
+    // ==================== PRIVATE HELPERS ====================
 
     private String generateProjectCode(String projectName) {
         String prefix = "PRJ";
         String year = String.valueOf(LocalDateTime.now().getYear()).substring(2);
         String random = String.format("%03d", (int) (Math.random() * 1000));
-
-        // Take first 3 letters of project name (uppercase)
         String namePart = projectName.length() >= 3
                 ? projectName.substring(0, 3).toUpperCase()
                 : projectName.toUpperCase();
-
         return prefix + year + namePart + random;
     }
 
@@ -340,12 +360,8 @@ public class ProjectServiceImpl implements ProjectService {
                 .build();
     }
 
-    /**
-     * Map Project entity to ProjectResponseDTO
-     */
     private ProjectResponseDTO mapToProjectResponseDTO(Project project) {
         ProjectResponseDTO dto = new ProjectResponseDTO();
-
         dto.setId(project.getId());
         dto.setCode(project.getCode());
         dto.setName(project.getName());
@@ -356,40 +372,39 @@ public class ProjectServiceImpl implements ProjectService {
         dto.setAssignmentDate(project.getAssignmentDate());
         dto.setCreatedAt(project.getCreatedAt());
         dto.setUpdatedAt(project.getUpdatedAt());
-
-        // Project manager info
         if (project.getProjectManager() != null) {
             dto.setProjectManagerName(
                     project.getProjectManager().getFirstName() + " " +
                             project.getProjectManager().getLastName());
             dto.setProjectManagerEmail(project.getProjectManager().getEmail());
         }
-
         return dto;
     }
 
-    /**
-     * Map Project + Team to ProjectWithTeamDTO
-     */
+    private ProjectStatusHistoryDTO mapToHistoryDTO(ProjectStatusHistory h) {
+        ProjectStatusHistoryDTO dto = new ProjectStatusHistoryDTO();
+        dto.setId(h.getId());
+        dto.setFromStatus(h.getFromStatus());
+        dto.setToStatus(h.getToStatus());
+        dto.setChangedBy(h.getChangedBy());
+        dto.setChangedAt(h.getChangedAt());
+        dto.setReason(h.getReason());
+        return dto;
+    }
+
     private ProjectWithTeamDTO mapToProjectResponseWithTeam(Project project,
                                                             List<TeamAssignment> team) {
         ProjectWithTeamDTO response = new ProjectWithTeamDTO();
-
         ProjectResponseDTO baseDto = mapToProjectResponseDTO(project);
         copyProperties(baseDto, response);
-
         List<TeamMemberDTO> teamMembers = team.stream()
                 .filter(assignment -> Boolean.TRUE.equals(assignment.getActive()))
-                .map(assignment -> mapToTeamMemberDTO(assignment))
+                .map(this::mapToTeamMemberDTO)
                 .collect(Collectors.toList());
-
         response.setTeamMembers(teamMembers);
         return response;
     }
 
-    /**
-     * Map TeamAssignment to TeamMemberDTO
-     */
     private TeamMemberDTO mapToTeamMemberDTO(TeamAssignment assignment) {
         return TeamMemberDTO.builder()
                 .id(assignment.getEmployee().getId())
@@ -404,9 +419,6 @@ public class ProjectServiceImpl implements ProjectService {
                 .build();
     }
 
-    /**
-     * Helper method to copy properties
-     */
     private void copyProperties(ProjectResponseDTO source, ProjectWithTeamDTO target) {
         target.setId(source.getId());
         target.setCode(source.getCode());
@@ -420,28 +432,5 @@ public class ProjectServiceImpl implements ProjectService {
         target.setUpdatedAt(source.getUpdatedAt());
         target.setProjectManagerName(source.getProjectManagerName());
         target.setProjectManagerEmail(source.getProjectManagerEmail());
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public boolean existsByCode(String code) {
-        return projectRepository.existsByCode(code);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public ProjectResponseDTO getProjectByCode(String code) {
-        Project project = projectRepository.findByCode(code)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Project not found with code: " + code));
-        return mapToProjectResponseDTO(project);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<ProjectResponseDTO> getInactiveProjects() {
-        return projectRepository.findInactiveProjects().stream()
-                .map(this::mapToProjectResponseDTO)
-                .collect(Collectors.toList());
     }
 }

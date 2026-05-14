@@ -92,7 +92,7 @@ class UserControllerTest {
                 .department(com.example.pfe.enums.Department.IT)
                 .hireDate(java.time.LocalDate.of(2023, 1, 1))
                 .contractType(com.example.pfe.enums.ContractType.CDI)
-                .baseSalary(2000.0)
+
                 .build();
     }
 

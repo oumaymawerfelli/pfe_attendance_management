@@ -15,9 +15,15 @@ import com.example.pfe.exception.ResourceNotFoundException;
 import com.example.pfe.mapper.LeaveMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -32,18 +38,24 @@ import java.util.stream.Collectors;
 @Slf4j
 public class LeaveService {
 
-    private final LeaveRequestRepository  leaveRequestRepository;
-    private final LeaveBalanceRepository  leaveBalanceRepository;
-    private final UserRepository          userRepository;
+    private final LeaveRequestRepository   leaveRequestRepository;
+    private final LeaveBalanceRepository   leaveBalanceRepository;
+    private final UserRepository           userRepository;
     private final TeamAssignmentRepository teamAssignmentRepository;
-    private final LeaveMapper             leaveMapper;
-    private final NotificationService notificationService; // ← ADD THIS
+    private final LeaveMapper              leaveMapper;
+    private final NotificationService      notificationService;
+
+    @Value("${app.upload.dir:uploads/leave-documents}")
+    private String uploadDir;
 
     // ══════════════════════════════════════════════════════════
-    // EMPLOYEE — Submit leave request
+    // EMPLOYEE — Submit leave request (multipart: JSON + optional file)
     // ══════════════════════════════════════════════════════════
 
-    public LeaveResponseDTO requestLeave(Long userId, LeaveRequestDTO dto) {
+    public LeaveResponseDTO requestLeave(Long userId,
+                                         LeaveRequestDTO dto,
+                                         MultipartFile attachment) {
+
         log.info("Leave request from user {} — type: {}, from {} to {}",
                 userId, dto.getLeaveType(), dto.getStartDate(), dto.getEndDate());
 
@@ -72,7 +84,72 @@ public class LeaveService {
         LeaveRequest saved = leaveRequestRepository.save(request);
         log.info("Leave request created — ID: {}, days: {}", saved.getId(), daysCount);
 
+        // Store attachment if provided
+        if (attachment != null && !attachment.isEmpty()) {
+            String filePath = storeAttachment(saved.getId(), attachment);
+            saved.setDocumentPath(filePath);
+            saved = leaveRequestRepository.save(saved);
+        }
+
         return leaveMapper.toResponseDTO(saved);
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // EMPLOYEE — Save draft (no workflow triggered)
+    // ══════════════════════════════════════════════════════════
+
+    public LeaveResponseDTO saveDraft(Long userId, LeaveRequestDTO dto) {
+        log.info("Saving draft for user {}", userId);
+
+        User user = getUserById(userId);
+
+        LeaveRequest draft = LeaveRequest.builder()
+                .user(user)
+                .leaveType(dto.getLeaveType())
+                .startDate(dto.getStartDate())
+                .endDate(dto.getEndDate())
+                .daysCount(dto.getDuration() != null
+                        ? dto.getDuration()
+                        : calculateWorkingDays(dto.getStartDate(), dto.getEndDate()))
+                .reason(dto.getReason() != null ? dto.getReason() : "")
+                .status(LeaveStatus.DRAFT)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        return leaveMapper.toResponseDTO(leaveRequestRepository.save(draft));
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // EMPLOYEE — Summary (balances + workflow) for the request form
+    // ══════════════════════════════════════════════════════════
+
+    @Transactional(readOnly = true)
+    public LeaveSummaryDTO getSummary(Long userId) {
+        int year = LocalDate.now().getYear();
+
+        LeaveBalance balance = leaveBalanceRepository
+                .findByUserIdAndYear(userId, year)
+                .orElseGet(() -> createDefaultBalance(userId, year));
+
+        LeaveSummaryDTO dto = new LeaveSummaryDTO();
+
+        // Reuse all LeaveBalanceDTO fields
+        dto.setYear(year);
+        dto.setAnnualTotal(balance.getAnnualTotal());
+        dto.setAnnualTaken(balance.getAnnualTaken());
+        dto.setAnnualRemaining(balance.getAnnualTotal() - balance.getAnnualTaken());
+
+        dto.setSickTotal(balance.getSickTotal());
+        dto.setSickTaken(balance.getSickTaken());
+        dto.setSickRemaining(balance.getSickTotal() - balance.getSickTaken());
+
+        dto.setUnpaidTotal(balance.getUnpaidTotal());
+        dto.setUnpaidTaken(balance.getUnpaidTaken());
+
+        // Workflow chain — fixed 3-step for now
+        dto.setWorkflow(List.of("TEAM_LEAD", "HR_MANAGER", "GENERAL_MANAGER"));
+
+        return dto;
     }
 
     // ══════════════════════════════════════════════════════════
@@ -92,7 +169,7 @@ public class LeaveService {
     // EMPLOYEE — View own balance
     // ══════════════════════════════════════════════════════════
 
-    @Transactional
+    @Transactional(readOnly = true)
     public LeaveBalanceDTO getMyBalance(Long userId) {
         int currentYear = LocalDate.now().getYear();
         LeaveBalance balance = leaveBalanceRepository
@@ -134,13 +211,13 @@ public class LeaveService {
         request.setApprovedBy(admin);
         request.setDecidedAt(LocalDateTime.now());
 
-        deductBalance(request.getUser().getId(), request.getLeaveType(), request.getDaysCount());
+        deductBalance(request.getUser().getId(),
+                request.getLeaveType(), request.getDaysCount());
 
         LeaveRequest saved = leaveRequestRepository.save(request);
-        log.info("Leave request {} approved — {} days deducted from {} balance",
+        log.info("Leave {} approved — {} days deducted from {} balance",
                 requestId, request.getDaysCount(), request.getLeaveType());
 
-        // Add notification
         notificationService.notifyLeaveApproved(
                 request.getUser().getId(),
                 leaveLabel(request.getLeaveType()),
@@ -166,7 +243,6 @@ public class LeaveService {
         LeaveRequest saved = leaveRequestRepository.save(request);
         log.info("Leave request {} rejected", requestId);
 
-        // Add notification
         notificationService.notifyLeaveRejected(
                 request.getUser().getId(),
                 leaveLabel(request.getLeaveType()),
@@ -177,12 +253,9 @@ public class LeaveService {
     }
 
     // ══════════════════════════════════════════════════════════
-    // PROJECT MANAGER — Scoped to own team only
+    // PROJECT MANAGER — Scoped to own team
     // ══════════════════════════════════════════════════════════
 
-    /**
-     * Returns ALL leave requests (any status) for the PM's active team members.
-     */
     @Transactional(readOnly = true)
     public List<LeaveResponseDTO> getTeamAllLeaves(Long pmId) {
         Set<Long> teamIds = resolveTeamMemberIds(pmId);
@@ -195,9 +268,6 @@ public class LeaveService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Returns PENDING leave requests for the PM's active team members (inbox).
-     */
     @Transactional(readOnly = true)
     public List<LeaveResponseDTO> getTeamPendingLeaves(Long pmId) {
         Set<Long> teamIds = resolveTeamMemberIds(pmId);
@@ -210,33 +280,49 @@ public class LeaveService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * PM approves a leave — only allowed if the requester is in their team.
-     */
     public LeaveResponseDTO approveLeaveByPM(Long requestId, Long pmId) {
         log.info("PM {} approving leave request {}", pmId, requestId);
-
         LeaveRequest request = getLeaveRequestById(requestId);
         assertIsTeamMember(pmId, request.getUser().getId());
-
         return approveLeave(requestId, pmId);
     }
 
-    /**
-     * PM rejects a leave — only allowed if the requester is in their team.
-     */
     public LeaveResponseDTO rejectLeaveByPM(Long requestId, Long pmId, LeaveDecisionDTO dto) {
         log.info("PM {} rejecting leave request {}", pmId, requestId);
-
         LeaveRequest request = getLeaveRequestById(requestId);
         assertIsTeamMember(pmId, request.getUser().getId());
-
         return rejectLeave(requestId, pmId, dto);
     }
 
     // ══════════════════════════════════════════════════════════
     // PRIVATE HELPERS
     // ══════════════════════════════════════════════════════════
+
+    /**
+     * Saves the uploaded file to the configured upload directory.
+     * Returns the relative path stored in the database.
+     */
+    private String storeAttachment(Long leaveId, MultipartFile file) {
+        try {
+            Path dir = Paths.get(uploadDir);
+            Files.createDirectories(dir);
+
+            String originalName = file.getOriginalFilename() != null
+                    ? file.getOriginalFilename().replaceAll("[^a-zA-Z0-9._-]", "_")
+                    : "attachment";
+            String filename = "leave_" + leaveId + "_" + originalName;
+            Path target = dir.resolve(filename);
+            Files.write(target, file.getBytes());
+
+            log.info("Attachment saved: {}", target);
+            return uploadDir + "/" + filename;
+
+        } catch (IOException e) {
+            log.error("Failed to store attachment for leave {}: {}", leaveId, e.getMessage());
+            // Non-fatal — request is saved, attachment is just missing
+            return null;
+        }
+    }
 
     private String leaveLabel(LeaveType type) {
         return switch (type) {
@@ -246,10 +332,6 @@ public class LeaveService {
         };
     }
 
-    /**
-     * Returns the IDs of all ACTIVE employees currently assigned to the PM's team.
-     * Uses the assignments where this PM was the assigning manager.
-     */
     private Set<Long> resolveTeamMemberIds(Long pmId) {
         return teamAssignmentRepository.findByAssigningManagerId(pmId)
                 .stream()
@@ -258,10 +340,6 @@ public class LeaveService {
                 .collect(Collectors.toSet());
     }
 
-    /**
-     * Throws BusinessException if the given employee is NOT in the PM's active team.
-     * Central guard used before any PM approve/reject action.
-     */
     private void assertIsTeamMember(Long pmId, Long employeeId) {
         boolean isMember = teamAssignmentRepository.findByAssigningManagerId(pmId)
                 .stream()

@@ -6,8 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-
+import com.example.pfe.enums.Department;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -144,4 +145,38 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
           AND a.checkIn IS NOT NULL
     """)
     List<Attendance> findByDateAndCheckOutIsNull(@Param("date") LocalDate date);
+
+    // Compte les check-ins AVANT 09h00 (on time)
+    @Query("SELECT COUNT(a) FROM Attendance a " +
+            "WHERE a.date BETWEEN :from AND :to " +
+            "AND (HOUR(a.checkIn) * 60 + MINUTE(a.checkIn)) < :minutes")
+    long countOnTime(@Param("from") LocalDate from,
+                     @Param("to")   LocalDate to,
+                     @Param("minutes") int minutes);
+
+    // Compte les check-ins APRÈS 09h00 (late)
+    @Query("SELECT COUNT(a) FROM Attendance a " +
+            "WHERE a.date BETWEEN :from AND :to " +
+            "AND (HOUR(a.checkIn) * 60 + MINUTE(a.checkIn)) >= :minutes")
+    long countLate(@Param("from") LocalDate from,
+                   @Param("to")   LocalDate to,
+                   @Param("minutes") int minutes);
+
+    @Query("SELECT COUNT(a) FROM Attendance a " +
+            "WHERE a.date BETWEEN :from AND :to " +
+            "AND (HOUR(a.checkIn) * 60 + MINUTE(a.checkIn)) < :minutes " +
+            "AND (:dept IS NULL OR a.user.department = :dept)")
+    long countOnTime(@Param("from") LocalDate from,
+                     @Param("to")   LocalDate to,
+                     @Param("minutes") int minutes,
+                     @Param("dept") Department dept);
+
+    @Query("SELECT COUNT(a) FROM Attendance a " +
+            "WHERE a.date BETWEEN :from AND :to " +
+            "AND (HOUR(a.checkIn) * 60 + MINUTE(a.checkIn)) >= :minutes " +
+            "AND (:dept IS NULL OR a.user.department = :dept)")
+    long countLate(@Param("from") LocalDate from,
+                   @Param("to")   LocalDate to,
+                   @Param("minutes") int minutes,
+                   @Param("dept") Department dept);
 }

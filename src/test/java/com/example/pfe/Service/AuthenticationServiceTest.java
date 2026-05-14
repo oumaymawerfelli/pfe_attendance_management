@@ -283,22 +283,20 @@ class AuthenticationServiceTest {
         @Test
         @DisplayName("✅ Approuve l'utilisateur et envoie l'email d'activation")
         void approveRegistration_success() {
-
             given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
-            // Pas de stubbing de generateActivationToken ici :
-            // mockUser a déjà un token valide → le service ne le régénère pas
+            // ✅ AJOUT : le service appelle TOUJOURS generateActivationToken
+            given(jwtService.generateActivationToken(any())).willReturn("new-token");
             given(userRepository.save(any())).willReturn(mockUser);
-            // willDoNothing() = pour les méthodes void, on dit "ne fais rien"
-            willDoNothing().given(emailService).sendActivationReminderEmail(anyString(), anyString());
+            willDoNothing().given(emailService)
+                    .sendActivationReminderEmail(anyString(), anyString());
 
             RegistrationResponseDTO result = authService.approveRegistration(1L);
 
-            // .contains("approved") → le message contient ce mot (pas forcément exactement)
             assertThat(result.getMessage()).contains("approved");
             assertThat(result.isActivationEmailSent()).isTrue();
-            // eq("jane.doe@example.com") = cet email EXACT doit avoir été utilisé
-            then(emailService).should().sendActivationReminderEmail(
-                    eq(mockUser.getEmail()), anyString());
+            // ✅ verify avec le vrai token généré
+            then(emailService).should()
+                    .sendActivationReminderEmail(eq(mockUser.getEmail()), eq("new-token"));
         }
 
         @Test
@@ -324,7 +322,7 @@ class AuthenticationServiceTest {
 
             assertThatThrownBy(() -> authService.approveRegistration(1L))
                     .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("already activated");
+                    .hasMessageContaining("Registration already processed");
         }
 
         @Test
@@ -337,7 +335,7 @@ class AuthenticationServiceTest {
             given(userRepository.findById(1L)).willReturn(Optional.of(mockUser));
             given(jwtService.generateActivationToken(any())).willReturn("regenerated-token");
             given(userRepository.save(any())).willReturn(mockUser);
-            willDoNothing().given(emailService).sendActivationReminderEmail(anyString(), anyString());
+            willDoNothing().given(emailService).sendActivationReminderEmail(anyString(), any());
 
             authService.approveRegistration(1L);
 

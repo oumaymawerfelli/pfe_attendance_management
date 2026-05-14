@@ -568,20 +568,22 @@ class AttendanceServiceTest {
         void shouldSetHalfDayWhenWorkedLessThanThreshold() {
             Long userId = 1L;
             LocalDate today = LocalDate.now();
-            // checkIn à 08:00, checkout à ~09:00 → ~1h travaillé < threshold=4
-            Attendance attendance = buildAttendance(userId, today, today.atTime(8, 0));
+
+            // ✅ checkIn il y a 30 minutes → toujours < halfDayThreshold=4h,
+            //    quelle que soit l'heure d'exécution du test
+            Attendance attendance = buildAttendance(userId, today,
+                    LocalDateTime.now().minusMinutes(30));
 
             when(attendanceRepository.findByUserIdAndDate(userId, today))
                     .thenReturn(Optional.of(attendance));
-            // halfDayThreshold=4 → 1h < 4 → HALF_DAY
-            // earlyDepartureHour=17 → mais HALF_DAY prend priorité
-            stubDurationConfig(8.0, 4, 17);
+            // earlyDepartureHour=0 → 0 < 0 = false → jamais EARLY_DEPARTURE
+            // halfDayThreshold=4  → 0.5h < 4h → HALF_DAY
+            stubDurationConfig(8.0, 4, 0);
 
             attendanceService.checkOutOnLogout(userId, null);
 
             assertThat(attendance.getStatus()).isEqualTo(AttendanceStatus.HALF_DAY);
         }
-
         @Test
         @DisplayName("Calcule correctement les heures supplémentaires")
         void shouldComputeOvertimeCorrectly() {

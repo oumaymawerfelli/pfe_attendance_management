@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -26,6 +27,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -42,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         LeaveControllerTest.TestSecurityConfig.class,
         LeaveControllerTest.GlobalExceptionHandler.class
 })
-@DisplayName("LeaveController - Tests")
+@DisplayName("LeaveController — Tests Unitaires")
 class LeaveControllerTest {
 
     @Autowired MockMvc      mockMvc;
@@ -62,8 +64,7 @@ class LeaveControllerTest {
                     .csrf(csrf -> csrf.disable())
                     .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                     .exceptionHandling(ex -> ex
-                            .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
-                    );
+                            .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
             return http.build();
         }
     }
@@ -89,12 +90,13 @@ class LeaveControllerTest {
     }
 
     private LeaveRequestDTO buildLeaveRequestDTO() {
-        return LeaveRequestDTO.builder()
-                .leaveType(LeaveType.ANNUAL)   // any valid enum value
-                .startDate(LocalDate.now().plusDays(1))
-                .endDate(LocalDate.now().plusDays(5))
-                .reason("Need some time off for personal reasons")  // >= 10 chars
-                .build();
+        // @Data seul ne génère pas de builder — on utilise les setters
+        LeaveRequestDTO dto = new LeaveRequestDTO();
+        dto.setLeaveType(LeaveType.ANNUAL);
+        dto.setStartDate(LocalDate.now().plusDays(1));
+        dto.setEndDate(LocalDate.now().plusDays(5));
+        dto.setReason("Need some time off for personal reasons"); // >= 10 chars
+        return dto;
     }
 
     private LeaveResponseDTO buildLeaveResponseDTO(Long id) {
@@ -104,9 +106,20 @@ class LeaveControllerTest {
     }
 
     private LeaveBalanceDTO buildLeaveBalanceDTO() {
-        LeaveBalanceDTO dto = new LeaveBalanceDTO();
-        // populate fields as needed
-        return dto;
+        return new LeaveBalanceDTO();
+    }
+
+    /**
+     * Construit la partie JSON "leaveRequest" pour les requêtes multipart.
+     * Le contrôleur utilise @RequestPart("leaveRequest"), donc le Content-Type
+     * de la partie DOIT être application/json.
+     */
+    private MockMultipartFile leaveRequestPart(LeaveRequestDTO dto) throws Exception {
+        return new MockMultipartFile(
+                "leaveRequest",          // nom de la partie (correspond à @RequestPart)
+                "",                      // nom de fichier original (vide pour une partie JSON)
+                MediaType.APPLICATION_JSON_VALUE,
+                objectMapper.writeValueAsBytes(dto));
     }
 
     @BeforeEach
@@ -115,8 +128,57 @@ class LeaveControllerTest {
                 .thenReturn(Optional.of(buildUser(USER_ID, EMAIL)));
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // POST /api/leaves/request
+    // GROUPE 1 — GET /api/leaves/summary
+    // ✅ NOUVEAU : endpoint présent dans le contrôleur mais absent des tests.
+    // Autorisé : tout utilisateur authentifié
+    // ══════════════════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("GET /api/leaves/summary")
+    class GetSummary {
+
+        @Test
+        @WithMockUser(username = EMAIL)
+        @DisplayName("✅ Utilisateur authentifié reçoit son résumé → 200 OK")
+        void shouldReturnSummary() throws Exception {
+            LeaveSummaryDTO summary = new LeaveSummaryDTO();
+            when(leaveService.getSummary(USER_ID)).thenReturn(summary);
+
+            mockMvc.perform(get("/api/leaves/summary"))
+                    .andExpect(status().isOk());
+
+            verify(leaveService).getSummary(USER_ID);
+        }
+
+        @Test
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
+        void shouldReturn401WhenNotAuthenticated() throws Exception {
+            mockMvc.perform(get("/api/leaves/summary"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @WithMockUser(username = "ghost@test.com")
+        @DisplayName("❌ Utilisateur introuvable en base → 404 Not Found")
+        void shouldReturn404WhenUserNotFound() throws Exception {
+            when(userRepository.findByEmail("ghost@test.com")).thenReturn(Optional.empty());
+
+            mockMvc.perform(get("/api/leaves/summary"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GROUPE 2 — POST /api/leaves/request  (multipart/form-data)
+    //
+    // ✅ CORRIGÉ :
+    //   - Le contrôleur déclare @RequestPart + consumes=MULTIPART_FORM_DATA.
+    //     On utilise donc mockMvc.perform(multipart(...)) avec MockMultipartFile,
+    //     pas post() + application/json.
+    //   - Le mock du service inclut le 3e paramètre (MultipartFile attachment).
+    //   - Le contrôleur retourne ResponseEntity.ok(...) → 200, pas 201.
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("POST /api/leaves/request")
@@ -124,26 +186,95 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL)
-        @DisplayName("Employee submits leave request → 201 Created")
+        @DisplayName("✅ Employé soumet une demande de congé → 200 OK")
         void shouldCreateLeaveRequest() throws Exception {
-            LeaveRequestDTO requestDTO  = buildLeaveRequestDTO();
+            LeaveRequestDTO  requestDTO  = buildLeaveRequestDTO();
             LeaveResponseDTO responseDTO = buildLeaveResponseDTO(1L);
 
-            when(leaveService.requestLeave(eq(USER_ID), any(LeaveRequestDTO.class)))
+            // ✅ CORRIGÉ : signature réelle = (Long userId, LeaveRequestDTO dto, MultipartFile attachment)
+            when(leaveService.requestLeave(eq(USER_ID), any(LeaveRequestDTO.class), any()))
                     .thenReturn(responseDTO);
 
-            mockMvc.perform(post("/api/leaves/request")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(requestDTO)))
-                    .andExpect(status().isCreated());
+            // ✅ CORRIGÉ : multipart() au lieu de post() + JSON
+            mockMvc.perform(multipart("/api/leaves/request")
+                            .file(leaveRequestPart(requestDTO)))
+                    .andExpect(status().isOk())   // ✅ 200, pas 201
+                    .andExpect(jsonPath("$.id").value(1));
 
-            verify(leaveService).requestLeave(eq(USER_ID), any(LeaveRequestDTO.class));
+            verify(leaveService).requestLeave(eq(USER_ID), any(LeaveRequestDTO.class), any());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @WithMockUser(username = EMAIL)
+        @DisplayName("✅ Demande avec pièce jointe → 200 OK")
+        void shouldCreateLeaveRequestWithAttachment() throws Exception {
+            LeaveRequestDTO requestDTO = buildLeaveRequestDTO();
+            MockMultipartFile attachment = new MockMultipartFile(
+                    "attachment", "doc.pdf", MediaType.APPLICATION_PDF_VALUE,
+                    "PDF content".getBytes());
+
+            when(leaveService.requestLeave(eq(USER_ID), any(LeaveRequestDTO.class), any(MultipartFile.class)))
+                    .thenReturn(buildLeaveResponseDTO(2L));
+
+            mockMvc.perform(multipart("/api/leaves/request")
+                            .file(leaveRequestPart(requestDTO))
+                            .file(attachment))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
-            mockMvc.perform(post("/api/leaves/request")
+            mockMvc.perform(multipart("/api/leaves/request")
+                            .file(leaveRequestPart(buildLeaveRequestDTO())))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @WithMockUser(username = "ghost@test.com")
+        @DisplayName("❌ Utilisateur introuvable en base → 404 Not Found")
+        void shouldReturn404WhenUserNotFound() throws Exception {
+            when(userRepository.findByEmail("ghost@test.com")).thenReturn(Optional.empty());
+
+            mockMvc.perform(multipart("/api/leaves/request")
+                            .file(leaveRequestPart(buildLeaveRequestDTO())))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GROUPE 3 — POST /api/leaves/draft
+    // ✅ NOUVEAU : endpoint présent dans le contrôleur mais absent des tests.
+    // Autorisé : tout utilisateur authentifié, corps JSON classique
+    // ══════════════════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("POST /api/leaves/draft")
+    class SaveDraft {
+
+        @Test
+        @WithMockUser(username = EMAIL)
+        @DisplayName("✅ Employé sauvegarde un brouillon → 200 OK")
+        void shouldSaveDraft() throws Exception {
+            LeaveRequestDTO  requestDTO  = buildLeaveRequestDTO();
+            LeaveResponseDTO responseDTO = buildLeaveResponseDTO(10L);
+
+            when(leaveService.saveDraft(eq(USER_ID), any(LeaveRequestDTO.class)))
+                    .thenReturn(responseDTO);
+
+            mockMvc.perform(post("/api/leaves/draft")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(requestDTO)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.id").value(10));
+
+            verify(leaveService).saveDraft(eq(USER_ID), any(LeaveRequestDTO.class));
+        }
+
+        @Test
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
+        void shouldReturn401WhenNotAuthenticated() throws Exception {
+            mockMvc.perform(post("/api/leaves/draft")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(buildLeaveRequestDTO())))
                     .andExpect(status().isUnauthorized());
@@ -151,19 +282,20 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = "ghost@test.com")
-        @DisplayName("Authenticated user not in DB → 404 Not Found")
+        @DisplayName("❌ Utilisateur introuvable en base → 404 Not Found")
         void shouldReturn404WhenUserNotFound() throws Exception {
             when(userRepository.findByEmail("ghost@test.com")).thenReturn(Optional.empty());
 
-            mockMvc.perform(post("/api/leaves/request")
+            mockMvc.perform(post("/api/leaves/draft")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(buildLeaveRequestDTO())))
                     .andExpect(status().isNotFound());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // GET /api/leaves/my
+    // GROUPE 4 — GET /api/leaves/my
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("GET /api/leaves/my")
@@ -171,7 +303,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL)
-        @DisplayName("Returns employee's own leave list → 200 OK")
+        @DisplayName("✅ Retourne l'historique de congés de l'employé → 200 OK")
         void shouldReturnMyLeaves() throws Exception {
             List<LeaveResponseDTO> leaves = List.of(buildLeaveResponseDTO(1L), buildLeaveResponseDTO(2L));
             when(leaveService.getMyLeaves(USER_ID)).thenReturn(leaves);
@@ -185,7 +317,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL)
-        @DisplayName("Returns empty list when no leaves → 200 OK")
+        @DisplayName("✅ Retourne une liste vide si aucun congé → 200 OK")
         void shouldReturnEmptyList() throws Exception {
             when(leaveService.getMyLeaves(USER_ID)).thenReturn(List.of());
 
@@ -195,15 +327,16 @@ class LeaveControllerTest {
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(get("/api/leaves/my"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // GET /api/leaves/my/balance
+    // GROUPE 5 — GET /api/leaves/my/balance
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("GET /api/leaves/my/balance")
@@ -211,7 +344,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL)
-        @DisplayName("Returns employee's leave balance → 200 OK")
+        @DisplayName("✅ Retourne le solde de congés de l'employé → 200 OK")
         void shouldReturnBalance() throws Exception {
             when(leaveService.getMyBalance(USER_ID)).thenReturn(buildLeaveBalanceDTO());
 
@@ -222,15 +355,16 @@ class LeaveControllerTest {
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(get("/api/leaves/my/balance"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // GET /api/leaves/team/all
+    // GROUPE 6 — GET /api/leaves/team/all
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("GET /api/leaves/team/all")
@@ -238,7 +372,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "PROJECT_MANAGER")
-        @DisplayName("PM fetches all team leaves → 200 OK")
+        @DisplayName("✅ PM récupère tous les congés de son équipe → 200 OK")
         void shouldReturnAllTeamLeaves() throws Exception {
             List<LeaveResponseDTO> leaves = List.of(buildLeaveResponseDTO(1L));
             when(leaveService.getTeamAllLeaves(USER_ID)).thenReturn(leaves);
@@ -251,23 +385,24 @@ class LeaveControllerTest {
         }
 
         @Test
-        @WithMockUser(username = EMAIL, roles = "USER")
-        @DisplayName("Non-PM role → 403 Forbidden")
+        @WithMockUser(username = EMAIL, roles = "EMPLOYEE")
+        @DisplayName("❌ Rôle non-PM → 403 Forbidden")
         void shouldReturn403ForNonPM() throws Exception {
             mockMvc.perform(get("/api/leaves/team/all"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(get("/api/leaves/team/all"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // GET /api/leaves/team/pending
+    // GROUPE 7 — GET /api/leaves/team/pending
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("GET /api/leaves/team/pending")
@@ -275,7 +410,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "PROJECT_MANAGER")
-        @DisplayName("PM fetches pending team leaves → 200 OK")
+        @DisplayName("✅ PM récupère les congés en attente de son équipe → 200 OK")
         void shouldReturnPendingTeamLeaves() throws Exception {
             List<LeaveResponseDTO> leaves = List.of(buildLeaveResponseDTO(5L));
             when(leaveService.getTeamPendingLeaves(USER_ID)).thenReturn(leaves);
@@ -288,23 +423,24 @@ class LeaveControllerTest {
         }
 
         @Test
-        @WithMockUser(username = EMAIL, roles = "USER")
-        @DisplayName("Non-PM role → 403 Forbidden")
+        @WithMockUser(username = EMAIL, roles = "EMPLOYEE")
+        @DisplayName("❌ Rôle non-PM → 403 Forbidden")
         void shouldReturn403ForNonPM() throws Exception {
             mockMvc.perform(get("/api/leaves/team/pending"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(get("/api/leaves/team/pending"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // POST /api/leaves/team/{id}/approve
+    // GROUPE 8 — POST /api/leaves/team/{id}/approve
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("POST /api/leaves/team/{id}/approve")
@@ -312,7 +448,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "PROJECT_MANAGER")
-        @DisplayName("PM approves team leave → 200 OK")
+        @DisplayName("✅ PM approuve un congé de son équipe → 200 OK")
         void shouldApproveTeamLeave() throws Exception {
             when(leaveService.approveLeaveByPM(10L, USER_ID)).thenReturn(buildLeaveResponseDTO(10L));
 
@@ -324,7 +460,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "PROJECT_MANAGER")
-        @DisplayName("Passes correct leave ID to service")
+        @DisplayName("✅ L'ID du congé est correctement transmis au service")
         void shouldPassCorrectLeaveId() throws Exception {
             when(leaveService.approveLeaveByPM(42L, USER_ID)).thenReturn(buildLeaveResponseDTO(42L));
 
@@ -335,23 +471,24 @@ class LeaveControllerTest {
         }
 
         @Test
-        @WithMockUser(username = EMAIL, roles = "USER")
-        @DisplayName("Non-PM role → 403 Forbidden")
+        @WithMockUser(username = EMAIL, roles = "EMPLOYEE")
+        @DisplayName("❌ Rôle non-PM → 403 Forbidden")
         void shouldReturn403ForNonPM() throws Exception {
             mockMvc.perform(post("/api/leaves/team/10/approve"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(post("/api/leaves/team/10/approve"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // POST /api/leaves/team/{id}/reject
+    // GROUPE 9 — POST /api/leaves/team/{id}/reject
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("POST /api/leaves/team/{id}/reject")
@@ -359,7 +496,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "PROJECT_MANAGER")
-        @DisplayName("PM rejects team leave with reason → 200 OK")
+        @DisplayName("✅ PM rejette un congé avec motif → 200 OK")
         void shouldRejectTeamLeaveWithReason() throws Exception {
             LeaveDecisionDTO decision = new LeaveDecisionDTO();
             when(leaveService.rejectLeaveByPM(eq(10L), eq(USER_ID), any(LeaveDecisionDTO.class)))
@@ -375,7 +512,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "PROJECT_MANAGER")
-        @DisplayName("PM rejects team leave without body → 200 OK (dto defaults to empty)")
+        @DisplayName("✅ PM rejette sans corps de requête → 200 OK (dto vide par défaut)")
         void shouldRejectTeamLeaveWithoutBody() throws Exception {
             when(leaveService.rejectLeaveByPM(eq(10L), eq(USER_ID), any(LeaveDecisionDTO.class)))
                     .thenReturn(buildLeaveResponseDTO(10L));
@@ -385,23 +522,24 @@ class LeaveControllerTest {
         }
 
         @Test
-        @WithMockUser(username = EMAIL, roles = "USER")
-        @DisplayName("Non-PM role → 403 Forbidden")
+        @WithMockUser(username = EMAIL, roles = "EMPLOYEE")
+        @DisplayName("❌ Rôle non-PM → 403 Forbidden")
         void shouldReturn403ForNonPM() throws Exception {
             mockMvc.perform(post("/api/leaves/team/10/reject"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(post("/api/leaves/team/10/reject"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // GET /api/leaves/pending
+    // GROUPE 10 — GET /api/leaves/pending
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("GET /api/leaves/pending")
@@ -409,7 +547,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(roles = "GENERAL_MANAGER")
-        @DisplayName("GM fetches all pending leaves → 200 OK")
+        @DisplayName("✅ GM récupère tous les congés en attente → 200 OK")
         void shouldReturnPendingLeavesAsGM() throws Exception {
             when(leaveService.getPendingLeaves()).thenReturn(List.of(buildLeaveResponseDTO(1L)));
 
@@ -420,7 +558,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(roles = "ADMIN")
-        @DisplayName("Admin fetches all pending leaves → 200 OK")
+        @DisplayName("✅ Admin récupère tous les congés en attente → 200 OK")
         void shouldReturnPendingLeavesAsAdmin() throws Exception {
             when(leaveService.getPendingLeaves()).thenReturn(List.of(buildLeaveResponseDTO(2L)));
 
@@ -429,23 +567,24 @@ class LeaveControllerTest {
         }
 
         @Test
-        @WithMockUser(roles = "USER")
-        @DisplayName("Non-GM/Admin role → 403 Forbidden")
+        @WithMockUser(roles = "EMPLOYEE")
+        @DisplayName("❌ Rôle non autorisé → 403 Forbidden")
         void shouldReturn403ForUnauthorizedRole() throws Exception {
             mockMvc.perform(get("/api/leaves/pending"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(get("/api/leaves/pending"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // GET /api/leaves/all
+    // GROUPE 11 — GET /api/leaves/all
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("GET /api/leaves/all")
@@ -453,9 +592,10 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(roles = "GENERAL_MANAGER")
-        @DisplayName("GM fetches all leaves → 200 OK")
+        @DisplayName("✅ GM récupère tous les congés → 200 OK")
         void shouldReturnAllLeavesAsGM() throws Exception {
-            when(leaveService.getAllLeaves()).thenReturn(List.of(buildLeaveResponseDTO(1L), buildLeaveResponseDTO(2L)));
+            when(leaveService.getAllLeaves())
+                    .thenReturn(List.of(buildLeaveResponseDTO(1L), buildLeaveResponseDTO(2L)));
 
             mockMvc.perform(get("/api/leaves/all"))
                     .andExpect(status().isOk())
@@ -464,7 +604,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(roles = "ADMIN")
-        @DisplayName("Admin fetches all leaves → 200 OK")
+        @DisplayName("✅ Admin récupère tous les congés → 200 OK")
         void shouldReturnAllLeavesAsAdmin() throws Exception {
             when(leaveService.getAllLeaves()).thenReturn(List.of());
 
@@ -473,23 +613,24 @@ class LeaveControllerTest {
         }
 
         @Test
-        @WithMockUser(roles = "USER")
-        @DisplayName("Non-GM/Admin role → 403 Forbidden")
+        @WithMockUser(roles = "EMPLOYEE")
+        @DisplayName("❌ Rôle non autorisé → 403 Forbidden")
         void shouldReturn403ForUnauthorizedRole() throws Exception {
             mockMvc.perform(get("/api/leaves/all"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(get("/api/leaves/all"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // POST /api/leaves/{id}/approve
+    // GROUPE 12 — POST /api/leaves/{id}/approve
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("POST /api/leaves/{id}/approve")
@@ -497,7 +638,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "GENERAL_MANAGER")
-        @DisplayName("GM approves any leave → 200 OK")
+        @DisplayName("✅ GM approuve un congé → 200 OK")
         void shouldApproveLeaveAsGM() throws Exception {
             when(leaveService.approveLeave(10L, USER_ID)).thenReturn(buildLeaveResponseDTO(10L));
 
@@ -509,7 +650,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "ADMIN")
-        @DisplayName("Admin approves any leave → 200 OK")
+        @DisplayName("✅ Admin approuve un congé → 200 OK")
         void shouldApproveLeaveAsAdmin() throws Exception {
             when(leaveService.approveLeave(10L, USER_ID)).thenReturn(buildLeaveResponseDTO(10L));
 
@@ -518,23 +659,24 @@ class LeaveControllerTest {
         }
 
         @Test
-        @WithMockUser(roles = "USER")
-        @DisplayName("Non-GM/Admin role → 403 Forbidden")
+        @WithMockUser(roles = "EMPLOYEE")
+        @DisplayName("❌ Rôle non autorisé → 403 Forbidden")
         void shouldReturn403ForUnauthorizedRole() throws Exception {
             mockMvc.perform(post("/api/leaves/10/approve"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(post("/api/leaves/10/approve"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // POST /api/leaves/{id}/reject
+    // GROUPE 13 — POST /api/leaves/{id}/reject
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("POST /api/leaves/{id}/reject")
@@ -542,7 +684,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "GENERAL_MANAGER")
-        @DisplayName("GM rejects any leave with reason → 200 OK")
+        @DisplayName("✅ GM rejette un congé avec motif → 200 OK")
         void shouldRejectLeaveAsGM() throws Exception {
             LeaveDecisionDTO decision = new LeaveDecisionDTO();
             when(leaveService.rejectLeave(eq(10L), eq(USER_ID), any(LeaveDecisionDTO.class)))
@@ -558,7 +700,7 @@ class LeaveControllerTest {
 
         @Test
         @WithMockUser(username = EMAIL, roles = "GENERAL_MANAGER")
-        @DisplayName("GM rejects leave without body → 200 OK (dto defaults to empty)")
+        @DisplayName("✅ GM rejette sans corps de requête → 200 OK (dto vide par défaut)")
         void shouldRejectLeaveWithoutBody() throws Exception {
             when(leaveService.rejectLeave(eq(10L), eq(USER_ID), any(LeaveDecisionDTO.class)))
                     .thenReturn(buildLeaveResponseDTO(10L));
@@ -568,31 +710,32 @@ class LeaveControllerTest {
         }
 
         @Test
-        @WithMockUser(roles = "USER")
-        @DisplayName("Non-GM/Admin role → 403 Forbidden")
+        @WithMockUser(roles = "EMPLOYEE")
+        @DisplayName("❌ Rôle non autorisé → 403 Forbidden")
         void shouldReturn403ForUnauthorizedRole() throws Exception {
             mockMvc.perform(post("/api/leaves/10/reject"))
                     .andExpect(status().isForbidden());
         }
 
         @Test
-        @DisplayName("Unauthenticated → 401 Unauthorized")
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
             mockMvc.perform(post("/api/leaves/10/reject"))
                     .andExpect(status().isUnauthorized());
         }
     }
 
+
     // ══════════════════════════════════════════════════════════════════════════
-    // resolveUserId — user not found
+    // resolveUserId — utilisateur introuvable en base
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
-    @DisplayName("resolveUserId — user not found")
+    @DisplayName("resolveUserId — utilisateur introuvable")
     class ResolveUserIdNotFound {
 
         @Test
         @WithMockUser(username = "ghost@test.com")
-        @DisplayName("Authenticated email not in DB → 404 Not Found")
+        @DisplayName("❌ Email authentifié absent de la base → 404 Not Found")
         void shouldReturn404WhenUserNotFound() throws Exception {
             when(userRepository.findByEmail("ghost@test.com")).thenReturn(Optional.empty());
 

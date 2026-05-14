@@ -3,9 +3,7 @@ package com.example.pfe.Controller;
 import com.example.pfe.Service.JwtService;
 import com.example.pfe.Service.ProjectService;
 import com.example.pfe.Service.SecurityService;
-import com.example.pfe.dto.ProjectRequestDTO;
-import com.example.pfe.dto.ProjectResponseDTO;
-import com.example.pfe.dto.TeamMemberDTO;
+import com.example.pfe.dto.*;
 import com.example.pfe.enums.ProjectStatus;
 import com.example.pfe.exception.ResourceNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -46,8 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // ═══════════════════════════════════════════════════════════════════════════════
 // @WebMvcTest(ProjectController.class)
 //   → Lance UNIQUEMENT la couche Web (contrôleurs, filtres de sécurité).
-//     La base de données, les services réels, etc. ne sont PAS démarrés.
-//     Tous les services dont dépend le contrôleur sont des @MockBean.
+//     La base de données et les services réels ne sont PAS démarrés.
 //
 // @ContextConfiguration
 //   → Spécifie exactement quels beans charger dans le contexte de test.
@@ -62,22 +59,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("ProjectController — Tests Unitaires")
 class ProjectControllerTest {
 
-    // MockMvc = outil qui simule des requêtes HTTP sans démarrer un vrai serveur
     @Autowired MockMvc      mockMvc;
-    // ObjectMapper = convertit les objets Java en JSON (pour le corps des requêtes)
     @Autowired ObjectMapper objectMapper;
 
-    // @MockBean = faux service injecté dans le contrôleur
     @MockBean ProjectService  projectService;
     @MockBean JwtService      jwtService;
 
-    // ✅ Le vrai SecurityService de votre projet (pour le SpEL @securityService.isProjectManager)
     @MockBean(name = "securityService")
     SecurityService securityService;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Configuration de sécurité minimale pour les tests
-    // Désactive CSRF, exige l'authentification, retourne 401 si non authentifié
+    // Configuration de sécurité minimale pour les tests :
+    // désactive CSRF, exige l'authentification, retourne 401 si non authentifié.
     // ═══════════════════════════════════════════════════════════════════════════
     @Configuration
     @EnableWebSecurity
@@ -96,7 +89,7 @@ class ProjectControllerTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Gestionnaire d'exceptions pour les tests
+    // Gestionnaire d'exceptions pour les tests :
     // ResourceNotFoundException → 404 (sinon @WebMvcTest retourne 500)
     // ═══════════════════════════════════════════════════════════════════════════
     @RestControllerAdvice
@@ -109,8 +102,11 @@ class ProjectControllerTest {
     // ─────────────────────────────────────────────────────────────────────────
     // Données de test réutilisables
     // ─────────────────────────────────────────────────────────────────────────
-    private ProjectResponseDTO projectResponse;
-    private ProjectRequestDTO  projectRequest;
+    private ProjectResponseDTO    projectResponse;
+    private ProjectRequestDTO     projectRequest;
+    // ✅ CORRIGÉ : le contrôleur reçoit un @RequestBody StatusUpdateRequestDTO,
+    //              pas un simple @RequestParam.
+    private StatusUpdateRequestDTO statusUpdateRequest;
 
     @BeforeEach
     void setUp() {
@@ -123,12 +119,18 @@ class ProjectControllerTest {
         projectResponse.setStartDate(LocalDate.of(2025, 1, 1));
         projectResponse.setEndDate(LocalDate.of(2025, 12, 31));
 
-        // Requête fictive envoyée par le client
+        // Requête de création / mise à jour
         projectRequest = new ProjectRequestDTO();
         projectRequest.setName("Test Project");
         projectRequest.setStatus(ProjectStatus.PLANNED);
         projectRequest.setStartDate(LocalDate.of(2025, 1, 1));
         projectRequest.setEndDate(LocalDate.of(2025, 12, 31));
+
+        // ✅ CORRIGÉ : corps JSON envoyé à PUT /api/projects/{id}/status
+        statusUpdateRequest = new StatusUpdateRequestDTO();
+        statusUpdateRequest.setStatus(ProjectStatus.IN_PROGRESS);
+        // Si StatusUpdateRequestDTO possède un champ comment, décommentez :
+        // statusUpdateRequest.setComment("Passage en cours");
     }
 
 
@@ -145,10 +147,8 @@ class ProjectControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("✅ ADMIN peut créer un projet → 200 OK")
         void adminCanCreate() throws Exception {
-            // GIVEN
             when(projectService.createProject(any())).thenReturn(projectResponse);
 
-            // WHEN / THEN
             mockMvc.perform(post("/api/projects")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(projectRequest)))
@@ -157,7 +157,6 @@ class ProjectControllerTest {
                     .andExpect(jsonPath("$.name").value("Test Project"))
                     .andExpect(jsonPath("$.code").value("PRJ26ABC123"));
 
-            // Vérifier que le service a été appelé exactement 1 fois
             verify(projectService, times(1)).createProject(any());
         }
 
@@ -182,7 +181,6 @@ class ProjectControllerTest {
                             .content(objectMapper.writeValueAsString(projectRequest)))
                     .andExpect(status().isForbidden());
 
-            // Le service ne doit jamais être appelé si l'accès est refusé
             verify(projectService, never()).createProject(any());
         }
 
@@ -232,7 +230,6 @@ class ProjectControllerTest {
         @WithMockUser(roles = "EMPLOYEE")
         @DisplayName("❌ Projet introuvable → 404 Not Found")
         void projectNotFound_returns404() throws Exception {
-            // ResourceNotFoundException est mappée en 404 par TestExceptionHandler
             when(projectService.getProjectById(99L))
                     .thenThrow(new ResourceNotFoundException("Project not found: 99"));
 
@@ -261,13 +258,11 @@ class ProjectControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("✅ ADMIN peut lister les projets → 200 OK avec pagination")
         void adminCanListProjects() throws Exception {
-            // PageImpl = implémentation de Page pour les tests
             Page<ProjectResponseDTO> page = new PageImpl<>(List.of(projectResponse));
             when(projectService.getAllProjects(any(Pageable.class))).thenReturn(page);
 
             mockMvc.perform(get("/api/projects"))
                     .andExpect(status().isOk())
-                    // jsonPath("$.content") = les éléments de la page
                     .andExpect(jsonPath("$.content.length()").value(1))
                     .andExpect(jsonPath("$.content[0].name").value("Test Project"));
         }
@@ -353,8 +348,12 @@ class ProjectControllerTest {
 
     // ══════════════════════════════════════════════════════════════════════════
     // GROUPE 5 — PUT /api/projects/{id}/status  (changer le statut)
+    //
+    // ✅ CORRIGÉ : le contrôleur attend un @RequestBody StatusUpdateRequestDTO,
+    //              pas un @RequestParam.  Les mocks du service sont aussi corrigés
+    //              pour utiliser la signature updateProjectStatus(Long, StatusUpdateRequestDTO).
+    //
     // Autorisé : ADMIN, GENERAL_MANAGER, ou le PROJECT_MANAGER du projet
-    // Note : @securityService.isProjectManager(#id) est un SpEL dynamique
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
     @DisplayName("PUT /api/projects/{id}/status")
@@ -365,11 +364,13 @@ class ProjectControllerTest {
         @DisplayName("✅ ADMIN peut changer le statut → 200 OK")
         void adminCanUpdateStatus() throws Exception {
             projectResponse.setStatus(ProjectStatus.IN_PROGRESS);
-            when(projectService.updateProjectStatus(1L, ProjectStatus.IN_PROGRESS))
+            // ✅ signature corrigée : (Long id, StatusUpdateRequestDTO request)
+            when(projectService.updateProjectStatus(eq(1L), any(StatusUpdateRequestDTO.class)))
                     .thenReturn(projectResponse);
 
             mockMvc.perform(put("/api/projects/1/status")
-                            .param("status", "IN_PROGRESS"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(statusUpdateRequest)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
         }
@@ -378,11 +379,15 @@ class ProjectControllerTest {
         @WithMockUser(roles = "GENERAL_MANAGER")
         @DisplayName("✅ GENERAL_MANAGER peut changer le statut → 200 OK")
         void gmCanUpdateStatus() throws Exception {
-            when(projectService.updateProjectStatus(1L, ProjectStatus.COMPLETED))
+            StatusUpdateRequestDTO completedRequest = new StatusUpdateRequestDTO();
+            completedRequest.setStatus(ProjectStatus.COMPLETED);
+
+            when(projectService.updateProjectStatus(eq(1L), any(StatusUpdateRequestDTO.class)))
                     .thenReturn(projectResponse);
 
             mockMvc.perform(put("/api/projects/1/status")
-                            .param("status", "COMPLETED"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(completedRequest)))
                     .andExpect(status().isOk());
         }
 
@@ -390,14 +395,14 @@ class ProjectControllerTest {
         @WithMockUser(roles = "PROJECT_MANAGER")
         @DisplayName("✅ PROJECT_MANAGER du projet peut changer le statut → 200 OK")
         void pmOfProjectCanUpdateStatus() throws Exception {
-            // Le SpEL @securityService.isProjectManager(1) doit retourner true
-            // pour simuler que CE PM est bien le manager du projet ID=1
+            // Le SpEL @securityService.isProjectManager(#id) doit retourner true
             when(securityService.isProjectManager(1L)).thenReturn(true);
-            when(projectService.updateProjectStatus(1L, ProjectStatus.IN_PROGRESS))
+            when(projectService.updateProjectStatus(eq(1L), any(StatusUpdateRequestDTO.class)))
                     .thenReturn(projectResponse);
 
             mockMvc.perform(put("/api/projects/1/status")
-                            .param("status", "IN_PROGRESS"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(statusUpdateRequest)))
                     .andExpect(status().isOk());
         }
 
@@ -409,7 +414,8 @@ class ProjectControllerTest {
             when(securityService.isProjectManager(1L)).thenReturn(false);
 
             mockMvc.perform(put("/api/projects/1/status")
-                            .param("status", "IN_PROGRESS"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(statusUpdateRequest)))
                     .andExpect(status().isForbidden());
         }
 
@@ -420,7 +426,8 @@ class ProjectControllerTest {
             when(securityService.isProjectManager(anyLong())).thenReturn(false);
 
             mockMvc.perform(put("/api/projects/1/status")
-                            .param("status", "IN_PROGRESS"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(statusUpdateRequest)))
                     .andExpect(status().isForbidden());
         }
 
@@ -428,14 +435,87 @@ class ProjectControllerTest {
         @DisplayName("❌ Non authentifié → 401 Unauthorized")
         void unauthenticatedIsRejected() throws Exception {
             mockMvc.perform(put("/api/projects/1/status")
-                            .param("status", "IN_PROGRESS"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(statusUpdateRequest)))
                     .andExpect(status().isUnauthorized());
         }
     }
 
 
     // ══════════════════════════════════════════════════════════════════════════
-    // GROUPE 6 — DELETE /api/projects/{id}  (supprimer un projet)
+    // GROUPE 6 — GET /api/projects/{id}/status-history  (historique des statuts)
+    //
+    // ✅ NOUVEAU : cet endpoint existait dans le contrôleur mais n'était pas testé.
+    // Autorisé : tout utilisateur authentifié
+    // ══════════════════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("GET /api/projects/{id}/status-history")
+    class GetStatusHistory {
+
+        @Test
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("✅ ADMIN peut voir l'historique → 200 OK avec la liste")
+        void adminCanGetHistory() throws Exception {
+            ProjectStatusHistoryDTO entry = new ProjectStatusHistoryDTO();
+            entry.setFromStatus(ProjectStatus.PLANNED);
+            entry.setToStatus(ProjectStatus.IN_PROGRESS);
+            entry.setChangedBy("admin@company.com");
+
+            when(projectService.getStatusHistory(1L)).thenReturn(List.of(entry));
+
+            mockMvc.perform(get("/api/projects/1/status-history"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].fromStatus").value("PLANNED"))
+                    .andExpect(jsonPath("$[0].toStatus").value("IN_PROGRESS"))
+                    .andExpect(jsonPath("$[0].changedBy").value("admin@company.com"));
+
+            verify(projectService).getStatusHistory(1L);
+        }
+
+        @Test
+        @WithMockUser(roles = "EMPLOYEE")
+        @DisplayName("✅ EMPLOYEE peut voir l'historique → 200 OK liste vide")
+        void employeeCanGetHistory() throws Exception {
+            when(projectService.getStatusHistory(1L)).thenReturn(List.of());
+
+            mockMvc.perform(get("/api/projects/1/status-history"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(0));
+        }
+
+        @Test
+        @WithMockUser(roles = "PROJECT_MANAGER")
+        @DisplayName("✅ PROJECT_MANAGER peut voir l'historique → 200 OK")
+        void pmCanGetHistory() throws Exception {
+            when(projectService.getStatusHistory(1L)).thenReturn(List.of());
+
+            mockMvc.perform(get("/api/projects/1/status-history"))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @WithMockUser(roles = "ADMIN")
+        @DisplayName("❌ Projet introuvable → 404 Not Found")
+        void projectNotFound_returns404() throws Exception {
+            when(projectService.getStatusHistory(99L))
+                    .thenThrow(new ResourceNotFoundException("Project not found: 99"));
+
+            mockMvc.perform(get("/api/projects/99/status-history"))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("❌ Non authentifié → 401 Unauthorized")
+        void unauthenticatedIsRejected() throws Exception {
+            mockMvc.perform(get("/api/projects/1/status-history"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // GROUPE 7 — DELETE /api/projects/{id}  (supprimer un projet)
     // Autorisé : ADMIN, GENERAL_MANAGER
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
@@ -503,7 +583,7 @@ class ProjectControllerTest {
 
 
     // ══════════════════════════════════════════════════════════════════════════
-    // GROUPE 7 — GET /api/projects/{id}/team  (membres de l'équipe)
+    // GROUPE 8 — GET /api/projects/{id}/team  (membres de l'équipe)
     // Autorisé : tout utilisateur authentifié
     // ══════════════════════════════════════════════════════════════════════════
     @Nested
@@ -514,7 +594,6 @@ class ProjectControllerTest {
         @WithMockUser(roles = "ADMIN")
         @DisplayName("✅ ADMIN peut voir l'équipe → 200 OK avec la liste")
         void adminCanGetTeam() throws Exception {
-            // Créer un membre d'équipe fictif
             TeamMemberDTO member = TeamMemberDTO.builder()
                     .id(10L)
                     .firstName("Alice")

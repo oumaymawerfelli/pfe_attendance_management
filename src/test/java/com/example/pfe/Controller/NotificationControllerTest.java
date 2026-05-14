@@ -215,7 +215,7 @@ class NotificationControllerTest {
         void shouldReturnUnreadCount() throws Exception {
             when(notificationService.getUnreadCount(USER_ID)).thenReturn(5L);
 
-            mockMvc.perform(get("/api/notifications/unread/count"))
+            mockMvc.perform(get("/api/notifications/unread-count"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.count").value(5));
         }
@@ -226,7 +226,7 @@ class NotificationControllerTest {
         void shouldReturnZeroWhenAllRead() throws Exception {
             when(notificationService.getUnreadCount(USER_ID)).thenReturn(0L);
 
-            mockMvc.perform(get("/api/notifications/unread/count"))
+            mockMvc.perform(get("/api/notifications/unread-count"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.count").value(0));
         }
@@ -234,7 +234,7 @@ class NotificationControllerTest {
         @Test
         @DisplayName("Non authentifié → 401 Unauthorized")
         void shouldReturn401WhenNotAuthenticated() throws Exception {
-            mockMvc.perform(get("/api/notifications/unread/count"))
+            mockMvc.perform(get("/api/notifications/unread-count"))
                     .andExpect(status().isUnauthorized());
         }
     }

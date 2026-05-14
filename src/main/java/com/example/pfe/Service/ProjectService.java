@@ -18,7 +18,9 @@ public interface ProjectService {
     void deleteProject(Long id);
 
     // Business Operations
-    ProjectResponseDTO updateProjectStatus(Long id, ProjectStatus status);
+    ProjectResponseDTO updateProjectStatus(Long id, StatusUpdateRequestDTO request);
+    List<ProjectStatusHistoryDTO> getStatusHistory(Long projectId);
+
     List<ProjectResponseDTO> getProjectsByStatus(ProjectStatus status);
     List<ProjectResponseDTO> getProjectsByManager(Long managerId);
     List<ProjectResponseDTO> searchProjects(String keyword);
