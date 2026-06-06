@@ -63,7 +63,7 @@ pipeline {
         stage('5. Package JAR') {
             steps {
                 echo 'Creation du JAR...'
-                sh 'mvn package -DskipTests -B'
+                sh 'mvn package -Dmaven.test.skip=true -B'
                 archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
             }
         }
