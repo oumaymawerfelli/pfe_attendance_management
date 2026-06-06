@@ -6,6 +6,7 @@ import com.example.pfe.enums.Gender;
 import com.example.pfe.enums.MaritalStatus;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
@@ -34,7 +35,7 @@ public class User {
    private LocalDate hireDate;
    private LocalDate contractEndDate;
    private LocalDate evaluationDate;
-   private LocalDate lastLogin;
+   private LocalDateTime lastLogin;
 
    @Enumerated(EnumType.STRING)
    private Gender gender;
@@ -67,7 +68,9 @@ public class User {
 
    private Integer evaluationScore;// Latest performance rating (e.g., 1-5 scale)
 
-
+   @CreationTimestamp
+   @Column(name = "created_at", updatable = false)
+   private LocalDateTime createdAt;
 
    private Integer createdBy; //ID of user who created this account (for audit)
 

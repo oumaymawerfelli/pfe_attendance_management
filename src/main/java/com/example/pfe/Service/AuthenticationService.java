@@ -199,7 +199,7 @@ public class AuthenticationService {
         checkAccountStatus(user);
 
         // Step 3: Update last login date
-        user.setLastLogin(LocalDate.now());
+        user.setLastLogin(LocalDateTime.now());
         user = userRepository.save(user);
 
         log.info(" User {} logged in. Last login updated to {}",

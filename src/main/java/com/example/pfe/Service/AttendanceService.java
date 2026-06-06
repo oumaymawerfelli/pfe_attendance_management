@@ -12,6 +12,7 @@ import com.example.pfe.entities.AttendanceConfig;
 import com.example.pfe.entities.LeaveRequest;
 import com.example.pfe.entities.User;
 import com.example.pfe.enums.AttendanceStatus;
+import com.example.pfe.enums.Department;
 import com.example.pfe.exception.BusinessException;
 import com.example.pfe.exception.ResourceNotFoundException;
 import com.example.pfe.mapper.AttendanceMapper;
@@ -21,15 +22,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
-import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,8 +41,7 @@ public class AttendanceService {
     private final TeamAssignmentRepository teamAssignmentRepository;
     private final AttendanceMapper         attendanceMapper;
     private final AttendanceConfigService  configService;
-    private final NotificationService notificationService;
-
+    private final NotificationService      notificationService;
 
     // ── Check-in ──────────────────────────────────────────────────────────────
 
@@ -64,9 +60,9 @@ public class AttendanceService {
             return;
         }
 
-        User user = getUserById(userId);
-        AttendanceStatus status = computeStatus(now, userId); // Modified to pass userId
-        Attendance attendance = Attendance.builder()
+        User             user      = getUserById(userId);
+        AttendanceStatus status    = computeStatus(now, userId);
+        Attendance       attendance = Attendance.builder()
                 .user(user).date(today).checkIn(now)
                 .status(status).overtimeHours(0.0)
                 .build();
@@ -84,12 +80,11 @@ public class AttendanceService {
                 .ifPresent(a -> {
                     a.setCheckOut(LocalDateTime.now());
                     if (notes != null && !notes.isBlank()) a.setNotes(notes);
-                    computeDuration(a, userId); // Modified to pass userId
+                    computeDuration(a, userId);
                     attendanceRepository.save(a);
                     log.info("Auto checkout on logout for user {} — status: {}, worked: {}h",
                             userId, a.getStatus(), a.getWorkDuration());
 
-                    // Add early departure notification
                     if (a.getStatus() == AttendanceStatus.EARLY_DEPARTURE) {
                         String checkoutTime = a.getCheckOut().toLocalTime()
                                 .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
@@ -111,10 +106,6 @@ public class AttendanceService {
 
     // ── Employee — single day detail ──────────────────────────────────────────
 
-    /**
-     * Returns the attendance record for a specific user on a specific date.
-     * Throws ResourceNotFoundException if no record exists (absent / weekend / future).
-     */
     @Transactional(readOnly = true)
     public AttendanceResponseDTO getMyDayRecord(Long userId, LocalDate date) {
         return attendanceRepository.findByUserIdAndDate(userId, date)
@@ -130,13 +121,33 @@ public class AttendanceService {
         int month = (filter.getMonth() != null) ? filter.getMonth() : LocalDate.now().getMonthValue();
         int year  = (filter.getYear()  != null) ? filter.getYear()  : LocalDate.now().getYear();
 
-        Set<LocalDate> leaveDaySet   = buildLeaveDaySet(userId, month, year);
+        User user = getUserById(userId);
+
+        // Account start date = MAX(hireDate, first attendance record).
+        // - New hires (post-integration): hireDate is the right cutoff.
+        // - Legacy users (hired before app integration): first attendance is the cutoff.
+        // - Fallback: createdAt → null (no clamp).
+        LocalDate hireDate        = user.getHireDate();
+        LocalDate firstAttendance = attendanceRepository.findFirstAttendanceDate(userId).orElse(null);
+
+        LocalDate accountStartDate;
+        if (hireDate != null && firstAttendance != null) {
+            accountStartDate = hireDate.isAfter(firstAttendance) ? hireDate : firstAttendance;
+        } else if (firstAttendance != null) {
+            accountStartDate = firstAttendance;
+        } else if (hireDate != null) {
+            accountStartDate = hireDate;
+        } else {
+            accountStartDate = (user.getCreatedAt() != null) ? user.getCreatedAt().toLocalDate() : null;
+        }
+
+        Set<LocalDate> leaveDaySet   = buildLeaveDaySet(userId, month, year, accountStartDate);
         int            leaveDayCount = leaveDaySet.size();
 
-        int presentDays = attendanceRepository.countByUserIdAndStatusAndMonthAndYear(userId, AttendanceStatus.PRESENT, month, year);
-        int lateDays    = attendanceRepository.countByUserIdAndStatusAndMonthAndYear(userId, AttendanceStatus.LATE,    month, year);
+        int presentDays = attendanceRepository.countByUserIdAndStatusAndMonthAndYear(userId, AttendanceStatus.PRESENT,  month, year);
+        int lateDays    = attendanceRepository.countByUserIdAndStatusAndMonthAndYear(userId, AttendanceStatus.LATE,     month, year);
         int halfDays    = attendanceRepository.countByUserIdAndStatusAndMonthAndYear(userId, AttendanceStatus.HALF_DAY, month, year);
-        int absentDays  = computeAbsentDays(month, year, presentDays, lateDays, halfDays, leaveDayCount);
+        int absentDays  = computeAbsentDays(month, year, presentDays, lateDays, halfDays, leaveDayCount, accountStartDate);
 
         double totalWorkedHours   = attendanceRepository.sumWorkDurationByUserIdAndMonthAndYear(userId, month, year);
         double totalOvertimeHours = attendanceRepository.sumOvertimeByUserIdAndMonthAndYear(userId, month, year);
@@ -162,6 +173,7 @@ public class AttendanceService {
                 .totalWorkedHours(totalWorkedHours).totalOvertimeHours(totalOvertimeHours)
                 .dailyHours(new ArrayList<>(dailyMap.values()))
                 .checkedInToday(attendanceRepository.existsByUserIdAndDate(userId, LocalDate.now()))
+                .accountStartDate(accountStartDate)
                 .build();
     }
 
@@ -187,6 +199,96 @@ public class AttendanceService {
 
         return attendanceRepository.findByUserIdInAndMonthAndYear(teamIds, month, year)
                 .stream().map(attendanceMapper::toResponseDTO).collect(Collectors.toList());
+    }
+
+    // ── Presence Sheet ────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<AttendanceResponseDTO> getPresenceSheet(LocalDate date, String department) {
+        if (date == null) date = LocalDate.now();
+        final LocalDate targetDate = date;
+
+        boolean filterDept = department != null
+                && !department.isBlank()
+                && !"ALL".equalsIgnoreCase(department);
+
+        List<User> users;
+        if (filterDept) {
+            try {
+                Department dept = Department.valueOf(department.toUpperCase());
+                users = userRepository.findAllByActiveTrueAndDepartment(dept);
+            } catch (IllegalArgumentException e) {
+                log.warn("Unknown department filter '{}' — returning all employees", department);
+                users = userRepository.findAllByActiveTrue();
+            }
+        } else {
+            users = userRepository.findAllByActiveTrue();
+        }
+
+        if (users.isEmpty()) return List.of();
+
+        Set<Long> userIds = users.stream().map(User::getId).collect(Collectors.toSet());
+
+        Map<Long, Attendance> attMap = attendanceRepository
+                .findByDateAndUserIdIn(targetDate, userIds)
+                .stream()
+                .collect(Collectors.toMap(a -> a.getUser().getId(), a -> a));
+
+        Set<Long> onLeaveIds = leaveRequestRepository
+                .findApprovedOnDate(targetDate, userIds)
+                .stream()
+                .map(lr -> lr.getUser().getId())
+                .collect(Collectors.toSet());
+
+        List<AttendanceResponseDTO> result = new ArrayList<>(users.size());
+        for (User user : users) {
+            result.add(buildPresenceRecord(user, targetDate, attMap, onLeaveIds));
+        }
+        return result;
+    }
+
+    private AttendanceResponseDTO buildPresenceRecord(
+            User                    user,
+            LocalDate               date,
+            Map<Long, Attendance>   attMap,
+            Set<Long>               onLeaveIds) {
+
+        Long       uid      = user.getId();
+        Attendance att      = attMap.get(uid);
+        boolean    onLeave  = onLeaveIds.contains(uid);
+
+        AttendanceStatus status;
+        LocalDateTime    checkIn  = null;
+        LocalDateTime    checkOut = null;
+        Double           worked   = null;
+        Double           overtime = null;
+
+        if (onLeave) {
+            status = AttendanceStatus.ON_LEAVE;
+        } else if (att != null) {
+            status   = att.getStatus();
+            checkIn  = att.getCheckIn();
+            checkOut = att.getCheckOut();
+            worked   = att.getWorkDuration();
+            overtime = att.getOvertimeHours();
+        } else {
+            status = AttendanceStatus.ABSENT;
+        }
+
+        return AttendanceResponseDTO.builder()
+                .userId(uid)
+                .userFullName(user.getFirstName() + " " + user.getLastName())
+                .userJobTitle(user.getJobTitle())
+                .userPhone(user.getPhone())
+                .userEmail(user.getEmail())
+                .userDepartment(user.getDepartment() != null ? user.getDepartment().name() : null)
+                .date(date)
+                .checkIn(checkIn)
+                .checkOut(checkOut)
+                .status(status)
+                .workDuration(worked)
+                .overtimeHours(overtime)
+                .build();
     }
 
     // ── Retroactive checkout ──────────────────────────────────────────────────
@@ -221,7 +323,7 @@ public class AttendanceService {
                 .orElse(false);
     }
 
-    // ── Scheduled job method for missed checkouts ────────────────────────────
+    // ── Scheduled — missed checkouts ─────────────────────────────────────────
 
     public void detectMissedCheckouts() {
         LocalDate yesterday = LocalDate.now().minusDays(1);
@@ -229,7 +331,8 @@ public class AttendanceService {
 
         for (Attendance attendance : attendances) {
             if (attendance.getCheckIn() != null) {
-                String dateStr = yesterday.format(java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy"));
+                String dateStr = yesterday.format(
+                        java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy"));
                 notificationService.notifyMissedCheckout(attendance.getUser().getId(), dateStr);
                 log.info("Missed checkout notification sent to user {} for date {}",
                         attendance.getUser().getId(), dateStr);
@@ -247,15 +350,20 @@ public class AttendanceService {
                 .collect(Collectors.toSet());
     }
 
-    private Set<LocalDate> buildLeaveDaySet(Long userId, int month, int year) {
+    private Set<LocalDate> buildLeaveDaySet(Long userId, int month, int year, LocalDate accountStartDate) {
         LocalDate monthStart = LocalDate.of(year, month, 1);
         LocalDate monthEnd   = YearMonth.of(year, month).atEndOfMonth();
+
+        LocalDate effectiveStart = (accountStartDate != null && accountStartDate.isAfter(monthStart))
+                ? accountStartDate
+                : monthStart;
 
         return leaveRequestRepository.findApprovedLeavesByUserAndPeriod(userId, monthStart, monthEnd)
                 .stream()
                 .flatMap(lr -> {
-                    LocalDate start = lr.getStartDate().isBefore(monthStart) ? monthStart : lr.getStartDate();
-                    LocalDate end   = lr.getEndDate().isAfter(monthEnd)       ? monthEnd   : lr.getEndDate();
+                    LocalDate start = lr.getStartDate().isBefore(effectiveStart) ? effectiveStart : lr.getStartDate();
+                    LocalDate end   = lr.getEndDate().isAfter(monthEnd)          ? monthEnd       : lr.getEndDate();
+                    if (start.isAfter(end)) return java.util.stream.Stream.empty();
                     List<LocalDate> days = new ArrayList<>();
                     LocalDate d = start;
                     while (!d.isAfter(end)) {
@@ -267,12 +375,21 @@ public class AttendanceService {
                 .collect(Collectors.toSet());
     }
 
-    private int computeAbsentDays(int month, int year, int present, int late, int half, int leave) {
-        LocalDate today    = LocalDate.now();
-        LocalDate monthEnd = YearMonth.of(year, month).atEndOfMonth();
+    private int computeAbsentDays(int month, int year, int present, int late, int half, int leave,
+                                  LocalDate accountStartDate) {
+        LocalDate today      = LocalDate.now();
+        LocalDate monthStart = LocalDate.of(year, month, 1);
+        LocalDate monthEnd   = YearMonth.of(year, month).atEndOfMonth();
+
+        LocalDate start = (accountStartDate != null && accountStartDate.isAfter(monthStart))
+                ? accountStartDate
+                : monthStart;
+
         LocalDate boundary = today.isBefore(monthEnd) ? today : monthEnd;
-        LocalDate d = LocalDate.of(year, month, 1);
+        if (start.isAfter(boundary)) return 0;
+
         int elapsedWorkingDays = 0;
+        LocalDate d = start;
         while (!d.isAfter(boundary)) {
             if (d.getDayOfWeek().getValue() < 6) elapsedWorkingDays++;
             d = d.plusDays(1);
@@ -281,20 +398,18 @@ public class AttendanceService {
     }
 
     private AttendanceStatus computeStatus(LocalDateTime checkIn, Long userId) {
-        int lateHour   = configService.getInt(AttendanceConfig.KEY_LATE_HOUR);
-        int lateMinute = configService.getInt(AttendanceConfig.KEY_LATE_MINUTE);
-        boolean isLate = checkIn.getHour() > lateHour
+        int  lateHour   = configService.getInt(AttendanceConfig.KEY_LATE_HOUR);
+        int  lateMinute = configService.getInt(AttendanceConfig.KEY_LATE_MINUTE);
+        boolean isLate  = checkIn.getHour() > lateHour
                 || (checkIn.getHour() == lateHour && checkIn.getMinute() > lateMinute);
 
         AttendanceStatus status = isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
 
-        // Add late notification
         if (status == AttendanceStatus.LATE) {
-            String checkinTime = checkIn.toLocalTime()
+            String time = checkIn.toLocalTime()
                     .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
-            notificationService.notifyLateArrival(userId, checkinTime);
+            notificationService.notifyLateArrival(userId, time);
         }
-
         return status;
     }
 
@@ -313,7 +428,6 @@ public class AttendanceService {
             attendance.setStatus(AttendanceStatus.HALF_DAY);
         } else if (attendance.getCheckOut().getHour() < earlyDepartureHour) {
             attendance.setStatus(AttendanceStatus.EARLY_DEPARTURE);
-            // Notification will be sent in checkOutOnLogout method
         }
     }
 

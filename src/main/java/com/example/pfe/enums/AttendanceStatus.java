@@ -3,7 +3,8 @@ package com.example.pfe.enums;
 public enum AttendanceStatus {
     PRESENT,
     LATE,
-    ABSENT ,
+    ABSENT,
     HALF_DAY,
-    EARLY_DEPARTURE//work less then 4 hours
+    EARLY_DEPARTURE,  // worked less than 4 hours
+    ON_LEAVE          // employee has an approved leave request
 }

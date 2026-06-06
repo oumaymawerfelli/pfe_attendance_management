@@ -32,8 +32,7 @@ public class UserRequestDTO {
     @NotNull(message = "Gender is required")
     private Gender gender;
 
-    @NotBlank(message = "National ID is required")
-    @Pattern(regexp = "^[0-9]{8}$", message = "National ID must contain 8 digits")
+    // No @NotBlank — optional on updates, validated manually on create
     private String nationalId;
 
     @NotBlank(message = "Nationality is required")

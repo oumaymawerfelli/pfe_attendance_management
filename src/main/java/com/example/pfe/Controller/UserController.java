@@ -111,21 +111,23 @@ public class UserController {
     @GetMapping
     public ResponseEntity<Page<UserResponseDTO>> getAllUsers(
             @PageableDefault(size = 10) Pageable pageable,
-            @RequestParam(required = false) String search) {
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String department,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String role) {     // ← add
 
-        Page<UserResponseDTO> response;
+        boolean hasAnyFilter = (search != null && !search.isBlank())
+                || (department != null && !department.isBlank())
+                || (status     != null && !status.isBlank())
+                || (role       != null && !role.isBlank());        // ← add
 
-        if (search != null && !search.trim().isEmpty()) {
-            // Recherche avec terme
-            response = userService.searchUsers(search.trim(), pageable);
-
-        } else {
-            // Tous les utilisateurs
-            response = userService.getAllUsers(pageable);
-        }
+        Page<UserResponseDTO> response = hasAnyFilter
+                ? userService.searchUsers(search, department, status, role, pageable)
+                : userService.getAllUsers(pageable);
 
         return ResponseEntity.ok(response);
     }
+
     @PostMapping(value = "/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, String>> uploadUserPhoto(
             @PathVariable Long id,

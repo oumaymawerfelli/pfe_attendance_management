@@ -11,6 +11,7 @@ import com.example.pfe.enums.LeaveStatus;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 @Repository
 public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long> {
@@ -66,4 +67,14 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     List<LeaveRequest> findByUserIdInAndStatusOrderByCreatedAtAsc(
             Collection<Long> userIds,
             LeaveStatus status);
+    @Query("""
+    SELECT lr FROM LeaveRequest lr
+    WHERE lr.status     = 'APPROVED'
+      AND lr.startDate <= :date
+      AND lr.endDate   >= :date
+      AND lr.user.id   IN :userIds
+    """)
+    List<LeaveRequest> findApprovedOnDate(
+            @Param("date")    LocalDate date,
+            @Param("userIds") Set<Long> userIds);
 }

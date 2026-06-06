@@ -12,6 +12,7 @@ import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
@@ -116,10 +117,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
 
     // ── PROJECT MANAGER: scoped to a set of team-member IDs ───────────────────
 
-    /**
-     * Attendance records for a specific set of employees in a given month/year.
-     * Used by PROJECT_MANAGER to view their team's attendance.
-     */
     @Query("""
         SELECT a FROM Attendance a
         WHERE a.user.id     IN :userIds
@@ -134,10 +131,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
 
     // ── MISSED CHECKOUT DETECTION ──────────────────────────────────────────────
 
-    /**
-     * Find all attendance records for a specific date where checkout is missing.
-     * Used by scheduled job to detect missed checkouts.
-     */
     @Query("""
         SELECT a FROM Attendance a
         WHERE a.date = :date
@@ -146,7 +139,8 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
     """)
     List<Attendance> findByDateAndCheckOutIsNull(@Param("date") LocalDate date);
 
-    // Compte les check-ins AVANT 09h00 (on time)
+    // ── On-time / late counts ──────────────────────────────────────────────────
+
     @Query("SELECT COUNT(a) FROM Attendance a " +
             "WHERE a.date BETWEEN :from AND :to " +
             "AND (HOUR(a.checkIn) * 60 + MINUTE(a.checkIn)) < :minutes")
@@ -154,7 +148,6 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                      @Param("to")   LocalDate to,
                      @Param("minutes") int minutes);
 
-    // Compte les check-ins APRÈS 09h00 (late)
     @Query("SELECT COUNT(a) FROM Attendance a " +
             "WHERE a.date BETWEEN :from AND :to " +
             "AND (HOUR(a.checkIn) * 60 + MINUTE(a.checkIn)) >= :minutes")
@@ -179,4 +172,21 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
                    @Param("to")   LocalDate to,
                    @Param("minutes") int minutes,
                    @Param("dept") Department dept);
+
+    @Query("SELECT a FROM Attendance a WHERE a.date = :date AND a.user.id IN :userIds")
+    List<Attendance> findByDateAndUserIdIn(
+            @Param("date")    LocalDate   date,
+            @Param("userIds") Set<Long> userIds);
+
+    // ── First attendance date (account activation proxy) ──────────────────────
+
+    /**
+     * Returns the earliest attendance date recorded for the user.
+     * Used to clamp summary calculations so legacy users (hired before the
+     * app was integrated) are not counted as absent for days before tracking
+     * actually started.
+     */
+    @Query("SELECT MIN(a.date) FROM Attendance a WHERE a.user.id = :userId")
+    Optional<LocalDate> findFirstAttendanceDate(@Param("userId") Long userId);
+
 }

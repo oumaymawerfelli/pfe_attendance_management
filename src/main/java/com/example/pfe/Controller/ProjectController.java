@@ -77,4 +77,11 @@ public class ProjectController {
     public ResponseEntity<List<TeamMemberDTO>> getTeamMembers(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.getProjectTeamMembers(id));
     }
+
+    @GetMapping("/employee/{employeeId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<ProjectResponseDTO>> getEmployeeProjects(
+            @PathVariable Long employeeId) {
+        return ResponseEntity.ok(projectService.getEmployeeProjects(employeeId));
+    }
 }

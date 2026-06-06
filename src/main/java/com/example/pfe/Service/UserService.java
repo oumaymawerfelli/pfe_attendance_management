@@ -14,6 +14,7 @@ import com.example.pfe.Repository.UserRepository;
 import com.example.pfe.exception.BusinessException;
 import com.example.pfe.exception.ResourceNotFoundException;
 import com.example.pfe.mapper.UserMapper;
+import com.example.pfe.specification.UserSpecification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -178,11 +179,14 @@ public class UserService {
      * Rechercher des utilisateurs
      */
     @Transactional(readOnly = true)
-    public List<UserResponseDTO> searchUsers(String keyword, String department, Boolean active) {
-        // Utilisez la méthode qui accepte String comme département
-        return userRepository.searchUsersWithStringDepartment(keyword, department, active).stream()
-                .map(userMapper::toResponseDTO)
-                .collect(Collectors.toList());
+    public Page<UserResponseDTO> searchUsers(String keyword,
+                                             String department,
+                                             String status,
+                                             String role,        // ← add
+                                             Pageable pageable) {
+        return userRepository
+                .findAll(UserSpecification.build(keyword, department, status, role), pageable)
+                .map(userMapper::toResponseDTO);
     }
 
     /**
@@ -203,6 +207,9 @@ public class UserService {
     }
 
     private void validateUserCreation(UserRequestDTO userRequestDTO) {
+        if (userRequestDTO.getNationalId() == null || userRequestDTO.getNationalId().isBlank()) {
+            throw new BusinessException("National ID is required");
+        }
         if (userRepository.existsByEmail(userRequestDTO.getEmail())) {
             throw new BusinessException("Email already exists");
         }
@@ -597,6 +604,18 @@ public class UserService {
         if (worked < 4.0 && attendance.getStatus() != AttendanceStatus.ABSENT) {
             attendance.setStatus(AttendanceStatus.HALF_DAY);
         }
+    }
+
+
+    @Transactional(readOnly = true)
+    public Page<UserResponseDTO> searchUsers(String keyword,
+                                             String department,
+                                             String status,
+                                             Pageable pageable) {
+
+        return userRepository
+                .findAll(UserSpecification.build(keyword, department, status), pageable)
+                .map(userMapper::toResponseDTO);
     }
 
 

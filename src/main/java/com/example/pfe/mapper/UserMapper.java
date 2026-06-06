@@ -157,18 +157,16 @@ public class UserMapper {
                         user.getDirectManager().getId() : null)
                 .childrenCount(user.getChildrenCount())
                 .description(user.getDescription())
-                .roles(user.getRoles() != null ?
-                        user.getRoles().stream()
-                                .map(role -> "ROLE_" + role.getName().name())
-                                .collect(Collectors.toList())
-                        : null)
+                .roles(user.getRoles().stream()
+                        .map(role -> role.getName().name())
+                        .collect(Collectors.toList()))
                 .enabled(user.isEnabled())
                 .registrationPending(user.isRegistrationPending())
                 .accountNonLocked(user.isAccountNonLocked())
-                .lastLogin(user.getLastLogin() != null ?
-                        user.getLastLogin().atStartOfDay() : null)
+                .lastLogin(user.getLastLogin())  // ✅ Simply return the LocalDateTime
                 .username(user.getUsername())
-                // ✅ AJOUTER CETTE LIGNE
+
+                .createdAt(user.getCreatedAt())   // ← add this
                 .avatar(user.getAvatar())
                 .build();
     }}

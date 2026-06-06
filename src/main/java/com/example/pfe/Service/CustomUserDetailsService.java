@@ -1,6 +1,7 @@
 package com.example.pfe.Service;
 
 import com.example.pfe.Repository.UserRepository;
+import com.example.pfe.config.UserPrincipal;
 import com.example.pfe.entities.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -26,33 +27,17 @@ public class CustomUserDetailsService implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-       // Searches for user by email in your database
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException(
                         "User not found with email: " + email));
-        //Checks if user has activated their account (enabled)
+
         if (!user.isEnabled()) {
             throw new UsernameNotFoundException("User account is disabled: " + email);
         }
-        //Gets all roles from user (e.g., ADMIN, USER, MANAGER)
-        //Converts them to Spring Security's format (adds "ROLE_" prefix)
-        //Example: role "ADMIN" becomes "ROLE_ADMIN"
-        List<SimpleGrantedAuthority> authorities = user.getRoles().stream()
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName().name()))
-                .collect(Collectors.toList());
 
-       //Creates Spring's own User object with all security info
-        return new org.springframework.security.core.userdetails.User(
-                user.getEmail(),
-                user.getPasswordHash(),
-                user.isEnabled(),
-                user.isAccountNonExpired(),
-                user.isCredentialsNonExpired(),
-                user.isAccountNonLocked(),
-                authorities
-        );
+        // ← Only this line changes: return UserPrincipal instead of Spring's User
+        return UserPrincipal.from(user);
     }}
-
 //Without this class, Spring Security would have no idea:
 //
 //How to find users in YOUR database

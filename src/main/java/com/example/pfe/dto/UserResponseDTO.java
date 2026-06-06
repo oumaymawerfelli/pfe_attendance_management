@@ -52,5 +52,6 @@ public class UserResponseDTO {
     private String avatar;
 
 
+
     private boolean accountNonLocked;
 }

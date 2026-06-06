@@ -40,3 +40,8 @@ build/
 
 ### Uploads (fichiers générés par l'app) ###
 uploads/
+
+application-local.properties
+application-*.properties
+!application.properties
+!application-local.properties.examplesrc/main/resources/application-local.properties

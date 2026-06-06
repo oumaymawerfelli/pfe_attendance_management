@@ -142,4 +142,16 @@ public class AttendanceController {
                 .orElseThrow(() -> new ResourceNotFoundException("Authenticated user not found"))
                 .getId();
     }
+
+    @GetMapping("/presence-sheet")
+    @PreAuthorize("hasRole('GENERAL_MANAGER') or hasRole('ADMIN')")
+    public ResponseEntity<List<AttendanceResponseDTO>> getPresenceSheet(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+
+            @RequestParam(required = false) String department) {
+
+        return ResponseEntity.ok(
+                attendanceService.getPresenceSheet(date, department));
+    }
 }

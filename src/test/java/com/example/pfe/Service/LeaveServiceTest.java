@@ -129,8 +129,13 @@ class LeaveServiceTest {
         @DisplayName("Crée une demande UNPAID sans vérifier le solde")
         void shouldCreateUnpaidLeaveWithoutBalanceCheck() {
             Long userId = 1L;
+
+            // ✅ Fix : cherche le prochain lundi
             LocalDate start = LocalDate.now().plusDays(1);
-            LocalDate end   = LocalDate.now().plusDays(2);
+            while (start.getDayOfWeek().getValue() >= 6) start = start.plusDays(1);
+            LocalDate end = start.plusDays(1);
+            while (end.getDayOfWeek().getValue() >= 6) end = end.plusDays(1);
+
             User user = buildUser(userId);
             LeaveRequest saved = buildRequest(1L, userId, LeaveStatus.PENDING, start, end);
 
@@ -139,7 +144,6 @@ class LeaveServiceTest {
             when(leaveRequestRepository.save(any())).thenReturn(saved);
             when(leaveMapper.toResponseDTO(saved)).thenReturn(new LeaveResponseDTO());
 
-            // ✅ CORRIGÉ : null = pas de pièce jointe
             leaveService.requestLeave(
                     userId, buildRequestDTO(start, end, LeaveType.UNPAID), null);
 

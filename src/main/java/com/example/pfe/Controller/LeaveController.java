@@ -2,6 +2,7 @@ package com.example.pfe.Controller;
 
 import com.example.pfe.Repository.UserRepository;
 import com.example.pfe.Service.LeaveService;
+import com.example.pfe.config.UserPrincipal;
 import com.example.pfe.dto.*;
 import com.example.pfe.exception.ResourceNotFoundException;
 import jakarta.validation.Valid;
@@ -15,6 +16,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -55,13 +57,13 @@ public class LeaveController {
     @PostMapping(value = "/request", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<LeaveResponseDTO> requestLeave(
-            @RequestPart("leaveRequest")                         LeaveRequestDTO dto,
-            @RequestPart(value = "attachment", required = false) MultipartFile   attachment,
-            @AuthenticationPrincipal UserDetails userDetails) {
+            @RequestPart("data") LeaveRequestDTO dto,
+            @RequestPart(value = "attachment", required = false) MultipartFile attachment,
+            @RequestParam(value = "attachmentType", defaultValue = "PROOF") String attachmentType,
+            @AuthenticationPrincipal UserPrincipal principal) {
 
-        Long userId = resolveUserId(userDetails);
-        log.info("Leave request from user {}", userId);
-        return ResponseEntity.ok(leaveService.requestLeave(userId, dto, attachment));
+        return ResponseEntity.ok(
+                leaveService.requestLeave(principal.getId(), dto, attachment, attachmentType));
     }
 
     /**
@@ -203,4 +205,6 @@ public class LeaveController {
                         "Authenticated user not found: " + userDetails.getUsername()))
                 .getId();
     }
+
+ 
 }

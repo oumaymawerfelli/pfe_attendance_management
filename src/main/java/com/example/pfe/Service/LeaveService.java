@@ -6,6 +6,7 @@ import com.example.pfe.Repository.TeamAssignmentRepository;
 import com.example.pfe.Repository.UserRepository;
 import com.example.pfe.dto.*;
 import com.example.pfe.entities.LeaveBalance;
+import com.example.pfe.entities.LeaveDocument;
 import com.example.pfe.entities.LeaveRequest;
 import com.example.pfe.entities.User;
 import com.example.pfe.enums.LeaveStatus;
@@ -19,6 +20,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import com.example.pfe.entities.LeaveDocument;
+
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -44,6 +47,7 @@ public class LeaveService {
     private final TeamAssignmentRepository teamAssignmentRepository;
     private final LeaveMapper              leaveMapper;
     private final NotificationService      notificationService;
+    private final DocumentService documentService;
 
     @Value("${app.upload.dir:uploads/leave-documents}")
     private String uploadDir;
@@ -54,7 +58,8 @@ public class LeaveService {
 
     public LeaveResponseDTO requestLeave(Long userId,
                                          LeaveRequestDTO dto,
-                                         MultipartFile attachment) {
+                                         MultipartFile attachment,
+                                         String attachmentType){
 
         log.info("Leave request from user {} — type: {}, from {} to {}",
                 userId, dto.getLeaveType(), dto.getStartDate(), dto.getEndDate());
@@ -86,9 +91,22 @@ public class LeaveService {
 
         // Store attachment if provided
         if (attachment != null && !attachment.isEmpty()) {
-            String filePath = storeAttachment(saved.getId(), attachment);
-            saved.setDocumentPath(filePath);
-            saved = leaveRequestRepository.save(saved);
+            try {
+                LeaveDocument.DocumentType docType;
+                try {
+                    docType = LeaveDocument.DocumentType.valueOf(attachmentType);
+                } catch (IllegalArgumentException e) {
+                    log.warn("Unknown attachment type '{}', defaulting to PROOF", attachmentType);
+                    docType = LeaveDocument.DocumentType.PROOF;
+                }
+
+                documentService.uploadDocument(attachment, saved.getId(), userId, docType);
+
+            } catch (IOException e) {
+                log.warn("Attachment upload failed for leave {} (IO): {}", saved.getId(), e.getMessage());
+            } catch (Exception e) {
+                log.warn("Attachment upload failed for leave {}: {}", saved.getId(), e.getMessage());
+            }
         }
 
         return leaveMapper.toResponseDTO(saved);
@@ -123,7 +141,7 @@ public class LeaveService {
     // EMPLOYEE — Summary (balances + workflow) for the request form
     // ══════════════════════════════════════════════════════════
 
-    @Transactional(readOnly = true)
+    @Transactional
     public LeaveSummaryDTO getSummary(Long userId) {
         int year = LocalDate.now().getYear();
 
@@ -218,6 +236,11 @@ public class LeaveService {
         log.info("Leave {} approved — {} days deducted from {} balance",
                 requestId, request.getDaysCount(), request.getLeaveType());
 
+        // ── NEW: generate and persist the acceptance letter ──────────────
+        // ── Generate and persist the acceptance letter ──────────────
+
+        // ── END NEW ──────────────────────────────────────────────────────
+
         notificationService.notifyLeaveApproved(
                 request.getUser().getId(),
                 leaveLabel(request.getLeaveType()),
@@ -227,7 +250,6 @@ public class LeaveService {
 
         return leaveMapper.toResponseDTO(saved);
     }
-
     public LeaveResponseDTO rejectLeave(Long requestId, Long adminId, LeaveDecisionDTO dto) {
         log.info("Admin/GM {} rejecting leave request {}", adminId, requestId);
 
@@ -298,31 +320,7 @@ public class LeaveService {
     // PRIVATE HELPERS
     // ══════════════════════════════════════════════════════════
 
-    /**
-     * Saves the uploaded file to the configured upload directory.
-     * Returns the relative path stored in the database.
-     */
-    private String storeAttachment(Long leaveId, MultipartFile file) {
-        try {
-            Path dir = Paths.get(uploadDir);
-            Files.createDirectories(dir);
 
-            String originalName = file.getOriginalFilename() != null
-                    ? file.getOriginalFilename().replaceAll("[^a-zA-Z0-9._-]", "_")
-                    : "attachment";
-            String filename = "leave_" + leaveId + "_" + originalName;
-            Path target = dir.resolve(filename);
-            Files.write(target, file.getBytes());
-
-            log.info("Attachment saved: {}", target);
-            return uploadDir + "/" + filename;
-
-        } catch (IOException e) {
-            log.error("Failed to store attachment for leave {}: {}", leaveId, e.getMessage());
-            // Non-fatal — request is saved, attachment is just missing
-            return null;
-        }
-    }
 
     private String leaveLabel(LeaveType type) {
         return switch (type) {
@@ -448,4 +446,20 @@ public class LeaveService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User with ID " + userId + " not found"));
     }
+    public void saveAuthorizationLetter(Long leaveRequestId,
+                                        Long adminId,
+                                        MultipartFile file) throws IOException {
+        LeaveRequest request = getLeaveRequestById(leaveRequestId);
+
+        // Convert MultipartFile to bytes and save as generated document
+        documentService.saveGeneratedDocumentFromFile(
+                file,
+                leaveRequestId,
+                request.getUser().getId(),  // ← employee's ID so it appears in THEIR documents
+                LeaveDocument.DocumentType.ACCEPTATION_LETTER
+        );
+
+        log.info("Authorization letter saved for leave {} by admin {}", leaveRequestId, adminId);
+    }
+
 }

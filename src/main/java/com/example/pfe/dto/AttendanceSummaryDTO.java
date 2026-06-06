@@ -1,10 +1,12 @@
 package com.example.pfe.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -18,14 +20,21 @@ public class AttendanceSummaryDTO {
     private int    lateDays;
     private int    absentDays;
     private int    halfDays;
-    private int    leaveDays;          // ← NEW — approved leave days in the period
+    private int    leaveDays;
 
     private double totalWorkedHours;
     private double totalOvertimeHours;
 
     /** True if the employee has already logged in today (first login = check-in). */
     private boolean checkedInToday;
-    // checkedOutToday removed — checkout is automatic on last logout, no UI flag needed
+
+    /**
+     * Earliest date attendance is meaningful for this user:
+     * MAX(hireDate, first attendance record). Days before this should
+     * not be rendered as "absent" on the client.
+     */
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
+    private LocalDate accountStartDate;
 
     private List<DailyHoursDTO> dailyHours;
 
@@ -38,9 +47,7 @@ public class AttendanceSummaryDTO {
         private String day;
         private double workedHours;
         private double overtimeHours;
-        /**
-         * One of: PRESENT | LATE | ABSENT | HALF_DAY | EARLY_DEPARTURE | LEAVE
-         */
+        /** One of: PRESENT | LATE | ABSENT | HALF_DAY | EARLY_DEPARTURE | LEAVE */
         private String status;
     }
 }

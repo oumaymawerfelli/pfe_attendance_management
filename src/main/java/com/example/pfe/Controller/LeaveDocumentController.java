@@ -2,6 +2,8 @@ package com.example.pfe.Controller;
 
 import com.example.pfe.Repository.LeaveRequestRepository;
 import com.example.pfe.Repository.UserRepository;
+import com.example.pfe.config.UserPrincipal;
+import com.example.pfe.entities.LeaveDocument;
 import com.example.pfe.entities.LeaveRequest;
 import com.example.pfe.exception.BusinessException;
 import com.example.pfe.exception.ResourceNotFoundException;
@@ -26,6 +28,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import com.example.pfe.Service.DocumentService;
 
 @RestController
 @RequestMapping("/api/leaves")
@@ -36,6 +39,7 @@ public class LeaveDocumentController {
     private final LeaveRequestRepository leaveRequestRepository;
     private final UserRepository         userRepository;
     private final JasperService jasperService;
+    private final DocumentService        documentService;
 
 
     @Value("${app.upload.dir:uploads}")
@@ -62,26 +66,27 @@ public class LeaveDocumentController {
             throw new BusinessException("Only PDF files are accepted.");
         }
 
-        // Build target directory: uploads/leave-docs/
+        // ✅ Save to leave_documents table (GENERATED + APPROVED)
+        documentService.saveGeneratedDocument(
+                file.getBytes(),
+                id,
+                leave.getUser().getId(),
+                LeaveDocument.DocumentType.ACCEPTATION_LETTER
+        );
+
+        // ✅ Keep legacy documentPath for openDocument() to still work
         Path dir = Paths.get(uploadBaseDir, "leave-docs");
         Files.createDirectories(dir);
-
-        // Filename: leave_{id}_{employeeName}.pdf
-        String safeName = leave.getUser().getFirstName() + "_" + leave.getUser().getLastName();
-        safeName = safeName.replaceAll("[^a-zA-Z0-9_-]", "_");
+        String safeName = (leave.getUser().getFirstName() + "_" + leave.getUser().getLastName())
+                .replaceAll("[^a-zA-Z0-9_-]", "_");
         String fileName = "leave_" + id + "_" + safeName + ".pdf";
-
-        Path target = dir.resolve(fileName);
-        Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-
-        // Persist the relative path
+        Files.write(dir.resolve(fileName), file.getBytes());
         leave.setDocumentPath("leave-docs/" + fileName);
         leaveRequestRepository.save(leave);
 
-        log.info("Leave document saved for leave {} → {}", id, target);
+        log.info("Authorization letter saved for leave {} → leave_documents + disk", id);
         return ResponseEntity.ok().build();
     }
-
     // ── Serve / Download ──────────────────────────────────────────────────────
 
     /**
@@ -131,30 +136,36 @@ public class LeaveDocumentController {
                 leave.getUser().getFirstName(),
                 leave.getUser().getLastName(),
                 leave.getUser().getDepartment() != null
-                        ? leave.getUser().getDepartment().toString() : "—",   // ← enum → String
+                        ? leave.getUser().getDepartment().toString() : "—",
                 leave.getLeaveType().toString(),
                 request.getStartDate(),
                 request.getEndDate(),
-                leave.getDaysCount() != null
-                        ? leave.getDaysCount().intValue() : 0,                // ← Double → int
+                leave.getDaysCount() != null ? leave.getDaysCount().intValue() : 0,
                 request.getReason(),
                 request.getApprovedBy(),
                 request.getApprovalDate(),
                 request.getSignatureBase64()
         );
 
+        // ✅ Save to leave_documents table
+        documentService.saveGeneratedDocument(
+                pdfBytes,
+                id,
+                leave.getUser().getId(),
+                LeaveDocument.DocumentType.ACCEPTATION_LETTER
+        );
+
+        // ✅ Keep legacy documentPath
         Path dir = Paths.get(uploadBaseDir, "leave-docs");
         Files.createDirectories(dir);
-        String safeName = (leave.getUser().getFirstName()
-                + "_" + leave.getUser().getLastName())
+        String safeName = (leave.getUser().getFirstName() + "_" + leave.getUser().getLastName())
                 .replaceAll("[^a-zA-Z0-9_-]", "_");
         String fileName = "leave_" + id + "_" + safeName + ".pdf";
         Files.write(dir.resolve(fileName), pdfBytes);
-
         leave.setDocumentPath("leave-docs/" + fileName);
         leaveRequestRepository.save(leave);
 
-        log.info("✅ Leave document generated for leave {}", id);
+        log.info("✅ Leave document generated and saved for leave {}", id);
         return ResponseEntity.ok().build();
     }
 
@@ -164,5 +175,32 @@ public class LeaveDocumentController {
         return leaveRequestRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Leave request with ID " + id + " not found"));
+    }
+
+    /**
+     * POST /api/leaves/{id}/authorization-letter
+     * Called by the frontend after admin approves and signs.
+     * Saves the generated PDF as an ACCEPTATION_LETTER document.
+     */
+    @PostMapping(value = "/{leaveId}/authorization-letter",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'GENERAL_MANAGER', 'PROJECT_MANAGER')")
+    public ResponseEntity<Void> saveAuthorizationLetter(
+            @PathVariable Long leaveId,
+            @RequestPart("file") MultipartFile file,
+            @AuthenticationPrincipal UserPrincipal principal) throws IOException {
+
+        // Get the leave request to find the employee's ID
+        LeaveRequest leave = leaveRequestRepository.findById(leaveId)
+                .orElseThrow(() -> new ResourceNotFoundException("Leave not found: " + leaveId));
+
+        documentService.saveGeneratedDocument(
+                file.getBytes(),
+                leaveId,
+                leave.getUser().getId(),   // ← employee ID, not admin ID
+                LeaveDocument.DocumentType.ACCEPTATION_LETTER
+        );
+
+        return ResponseEntity.ok().build();
     }
 }

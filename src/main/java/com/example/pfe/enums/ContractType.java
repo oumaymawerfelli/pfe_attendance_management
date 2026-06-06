@@ -10,5 +10,6 @@ public enum ContractType {
     ALTERNANCE, // Contrat d'Alternance
     MISSION,    // Contrat de Mission
     FREELANCE,  // Travailleur Indépendant
-    ESSAI;      // Contrat d'Essai
+    ESSAI;
+    // Contrat d'Essai
 }
