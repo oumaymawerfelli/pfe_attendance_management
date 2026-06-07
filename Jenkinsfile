@@ -140,6 +140,7 @@ pipeline {
                '''
            }
        }
+       }
 
     post {
         success {
