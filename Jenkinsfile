@@ -89,58 +89,57 @@ pipeline {
            }
        }
 
-        stage('7. Deploy avec docker-compose') {
-            steps {
-                echo 'Deploiement complet (backend + frontend + MySQL)...'
-                sh '''
-                    docker-compose down --remove-orphans || true
-                    docker-compose up -d --build
-                    echo "Attente demarrage des conteneurs (30s)..."
-                    sleep 30
-                    docker-compose ps
-                '''
-            }
-        }
+       stage('7. Deploy avec docker-compose') {
+           steps {
+               echo 'Deploiement complet (backend + frontend + MySQL)...'
+               sh '''
+                   docker-compose --env-file .env down --remove-orphans || true
+                   docker-compose --env-file .env up -d --build
+                   echo "Attente demarrage des conteneurs (30s)..."
+                   sleep 30
+                   docker-compose --env-file .env ps
+               '''
+           }
+       }
 
-        stage('8. Health Check Backend') {
-            steps {
-                echo 'Verification du backend...'
-                sh '''
-                    for i in $(seq 1 24); do
-                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/ || echo "000")
-                        if echo "$STATUS" | grep -qE "200|401|403"; then
-                            echo "Backend repond avec code: $STATUS"
-                            exit 0
-                        fi
-                        echo "Tentative $i/24 (code: $STATUS)..."
-                        sleep 5
-                    done
-                    echo "Backend ne repond pas"
-                    docker-compose logs --tail=30 backend-app
-                    exit 1
-                '''
-            }
-        }
+       stage('8. Health Check Backend') {
+           steps {
+               echo 'Verification du backend...'
+               sh '''
+                   for i in $(seq 1 24); do
+                       STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/ || echo "000")
+                       if echo "$STATUS" | grep -qE "200|401|403"; then
+                           echo "Backend repond avec code: $STATUS"
+                           exit 0
+                       fi
+                       echo "Tentative $i/24 (code: $STATUS)..."
+                       sleep 5
+                   done
+                   echo "Backend ne repond pas"
+                   docker-compose --env-file .env logs --tail=30 backend-app
+                   exit 1
+               '''
+           }
+       }
 
-        stage('9. Health Check Frontend') {
-            steps {
-                echo 'Verification du frontend...'
-                sh '''
-                    for i in $(seq 1 12); do
-                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4200/ || echo "000")
-                        if [ "$STATUS" = "200" ]; then
-                            echo "Frontend repond avec code: $STATUS"
-                            exit 0
-                        fi
-                        echo "Tentative $i/12 (code: $STATUS)..."
-                        sleep 5
-                    done
-                    echo "Frontend ne repond pas, mais on continue"
-                    docker-compose logs --tail=20 frontend-app
-                '''
-            }
-        }
-    }
+       stage('9. Health Check Frontend') {
+           steps {
+               echo 'Verification du frontend...'
+               sh '''
+                   for i in $(seq 1 12); do
+                       STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4200/ || echo "000")
+                       if [ "$STATUS" = "200" ]; then
+                           echo "Frontend repond avec code: $STATUS"
+                           exit 0
+                       fi
+                       echo "Tentative $i/12 (code: $STATUS)..."
+                       sleep 5
+                   done
+                   echo "Frontend ne repond pas, mais on continue"
+                   docker-compose --env-file .env logs --tail=20 frontend-app
+               '''
+           }
+       }
 
     post {
         success {
@@ -152,17 +151,17 @@ pipeline {
             echo 'MySQL   : 192.168.33.10:3306'
             echo '==============================================='
         }
-        failure {
-            echo 'ECHEC du deploiement - voir les logs'
-            sh '''
-                echo "=== Etat des conteneurs ==="
-                docker-compose ps || true
-                echo "=== Logs backend ==="
-                docker-compose logs --tail=30 backend-app || true
-                echo "=== Logs frontend ==="
-                docker-compose logs --tail=30 frontend-app || true
-            '''
-        }
+       failure {
+           echo 'ECHEC du deploiement - voir les logs'
+           sh '''
+               echo "=== Etat des conteneurs ==="
+               docker-compose --env-file .env ps || true
+               echo "=== Logs backend ==="
+               docker-compose --env-file .env logs --tail=30 backend-app || true
+               echo "=== Logs frontend ==="
+               docker-compose --env-file .env logs --tail=30 frontend-app || true
+           '''
+       }
         always {
             echo 'Nettoyage du .env du workspace (securite)...'
             sh 'rm -f .env || true'
