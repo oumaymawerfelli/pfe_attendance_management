@@ -68,20 +68,26 @@ pipeline {
             }
         }
 
-        stage('6. Preparer .env') {
-            steps {
-                echo 'Recuperation du fichier .env depuis la VM...'
-                sh '''
-                    if [ ! -f ${ENV_FILE} ]; then
-                        echo "ERREUR: ${ENV_FILE} introuvable sur la VM !"
-                        echo "Creer avec: sudo nano /etc/pfe/.env"
-                        exit 1
-                    fi
-                    cp ${ENV_FILE} .env
-                    echo "Fichier .env copie dans le workspace"
-                '''
-            }
-        }
+       stage('6. Preparer .env') {
+           steps {
+               echo 'Preparation du .env (VM secrets + Jenkins credentials)...'
+               withCredentials([string(credentialsId: 'GROQ_API_KEY', variable: 'GROQ_KEY')]) {
+                   sh '''
+                       if [ ! -f ${ENV_FILE} ]; then
+                           echo "ERREUR: ${ENV_FILE} introuvable sur la VM !"
+                           echo "Creer avec: sudo nano /etc/pfe/.env"
+                           exit 1
+                       fi
+                       # Copie les secrets de base de la VM
+                       cp ${ENV_FILE} .env
+                       # Injecte la clé Groq depuis la credential Jenkins
+                       echo "" >> .env
+                       echo "GROQ_API_KEY=${GROQ_KEY}" >> .env
+                       echo "Fichier .env prepare (secrets VM + credential Jenkins)"
+                   '''
+               }
+           }
+       }
 
         stage('7. Deploy avec docker-compose') {
             steps {
