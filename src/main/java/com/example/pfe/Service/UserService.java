@@ -539,7 +539,6 @@ public class UserService {
         }
 
         try {
-            // Create upload directory if it doesn't exist
             Path uploadPath = Paths.get(uploadDir);
             if (!Files.exists(uploadPath)) {
                 Files.createDirectories(uploadPath);
@@ -552,23 +551,18 @@ public class UserService {
                 Files.deleteIfExists(oldFilePath);
             }
 
-            // Generate unique filename
             String extension = getFileExtension(photo.getOriginalFilename());
             String newFileName = "avatar_" + userId + "_" + UUID.randomUUID() + "." + extension;
             Path targetPath = uploadPath.resolve(newFileName);
-
-            // Save file
             Files.copy(photo.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
 
-            // Build public URL
-            String avatarUrl = baseUrl + "/uploads/avatars/" + newFileName;
-
-            // Save URL to user entity
-            user.setAvatar(avatarUrl);
+            // ✅ FIX : chemin relatif uniquement, sans baseUrl
+            String avatarPath = "/uploads/avatars/" + newFileName;
+            user.setAvatar(avatarPath);
             userRepository.save(user);
 
-            log.info("Photo uploaded successfully for user {}: {}", user.getEmail(), avatarUrl);
-            return avatarUrl;
+            log.info("Photo uploaded successfully for user {}: {}", user.getEmail(), avatarPath);
+            return avatarPath;
 
         } catch (IOException e) {
             log.error("Failed to upload photo for user {}: {}", userId, e.getMessage());

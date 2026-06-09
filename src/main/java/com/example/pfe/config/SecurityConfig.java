@@ -54,18 +54,7 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
-    @Configuration
-    public class WebConfig implements WebMvcConfigurer {
 
-        @Value("${app.upload.dir:uploads/avatars}")
-        private String uploadDir;
-
-        @Override
-        public void addResourceHandlers(ResourceHandlerRegistry registry) {
-            registry.addResourceHandler("/uploads/**")
-                    .addResourceLocations("file:" + uploadDir + "/../");
-        }
-    }
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
