@@ -3,6 +3,8 @@ package com.example.pfe.Service;
 import com.example.pfe.Repository.AttendanceRepository;
 import com.example.pfe.Repository.UserRepository;
 import com.example.pfe.dto.DemotivationScoreDTO;
+import com.example.pfe.dto.MlFeaturesRequest;
+import com.example.pfe.dto.MlPredictionResponse;
 import com.example.pfe.entities.User;
 import com.example.pfe.enums.AttendanceStatus;
 import com.example.pfe.exception.ResourceNotFoundException;
@@ -26,6 +28,7 @@ public class DemotivationBaselineService {
 
     private final AttendanceRepository attendanceRepository;
     private final UserRepository       userRepository;
+    private final DemotivationMlClient mlClient;
 
     // ── Poids de la baseline (analyse métier). Somme = 1.0 ──
     private static final double W_ABSENCE  = 0.45;
@@ -98,8 +101,18 @@ public class DemotivationBaselineService {
         breakdown.put("demiJournee",    round(W_HALF_DAY * halfRate));
         breakdown.put("departAnticipe", round(W_EARLY    * earlyRate));
 
-        log.debug("Score démotivation user {} ({}/{}) = {} [{}]",
-                userId, month, year, round(score), toLevel(score));
+        // ── 5) Appel au microservice ML (enrichissement) ──
+        MlFeaturesRequest mlRequest = new MlFeaturesRequest(
+                absenceRate, lateRate, halfRate, earlyRate);
+
+        MlPredictionResponse mlResponse = mlClient.predict(mlRequest);
+
+        Boolean mlArisque      = mlResponse != null ? mlResponse.isARisqueMl()      : null;
+        Double  mlProba        = mlResponse != null ? mlResponse.getProbaRisque()    : null;
+        Boolean verdictHybride = mlResponse != null ? mlResponse.isVerdictHybride()  : null;
+
+        log.debug("Score démotivation user {} ({}/{}) = {} [{}] | ML: {}",
+                userId, month, year, round(score), toLevel(score), mlArisque);
 
         return DemotivationScoreDTO.builder()
                 .userId(userId)
@@ -107,6 +120,9 @@ public class DemotivationBaselineService {
                 .score(round(score))
                 .level(toLevel(score))
                 .breakdown(breakdown)
+                .mlArisque(mlArisque)
+                .mlProba(mlProba)
+                .verdictHybride(verdictHybride)
                 .build();
     }
     /**
