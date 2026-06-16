@@ -1,0 +1,27 @@
+# Extrait à ajouter à ton docker-compose.yml existant (sous la clé `services:`).
+# Le service ML rejoint le même réseau que ton backend Spring Boot ;
+# Spring Boot l'appellera via l'URL interne http://ml-service:8000
+
+services:
+  ml-service:
+    build: ./ml-service          # dossier contenant Dockerfile, app.py, model.joblib
+    container_name: pfe-ml-service
+    restart: unless-stopped
+    # Pas besoin d'exposer le port à l'extérieur : seul le backend l'appelle
+    # en interne. Décommente la ligne ci-dessous pour tester depuis l'hôte.
+    # ports:
+    #   - "8000:8000"
+    expose:
+      - "8000"
+    networks:
+      - pfe-network            # adapte au nom de TON réseau existant
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+# Si ton fichier définit déjà `networks:`, ne le redéclare pas — réutilise le tien.
+networks:
+  pfe-network:
+    external: false

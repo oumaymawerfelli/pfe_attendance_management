@@ -70,6 +70,23 @@ services:
     depends_on:
       - backend-app
 
+  # ============================================
+  # SERVICE 4 : Microservice ML (détection démotivation)
+  # ============================================
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    image: ml-service:latest
+    container_name: pfe-ml-service
+    restart: unless-stopped
+    expose:
+      - "8000"
+    networks:
+      - app-network
+    depends_on:
+      - backend-app
+
 # ============================================
 # RÉSEAU PARTAGÉ
 # ============================================
