@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
-
+import org.springframework.http.MediaType;
 @Service
 @Slf4j
 public class DemotivationMlClient {
@@ -24,12 +24,13 @@ public class DemotivationMlClient {
         try {
             return restClient.post()
                     .uri("/predict")
+                    .contentType(MediaType.APPLICATION_JSON)   // ← ligne ajoutée
                     .body(features)
                     .retrieve()
                     .body(MlPredictionResponse.class);
         } catch (Exception e) {
             log.warn("Microservice ML indisponible : {}. Retour null.", e.getMessage());
-            return null;  // le service appelant gère le cas null
+            return null;
         }
     }
 }
