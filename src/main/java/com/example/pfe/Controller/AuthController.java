@@ -205,11 +205,23 @@ public class AuthController {
 
         menu.add(link("Notifications", "notifications", "notifications"));
 
+        // Users management: Admin + GM only
         if (isAdmin || isGM) {
-            menu.add(link("Users",    "users",    "people"));
+            menu.add(link("Users", "users", "people"));
+        }
+
+// Projects: Admin + GM + PM (PM voit ses projets gérés)
+        if (isAdmin || isGM || isPM) {
             menu.add(link("Projects", "projects", "assignment"));
         }
 
+// AI module: Admin + GM only
+        if (isAdmin || isGM) {
+            List<Map<String, Object>> aiChildren = new ArrayList<>();
+            aiChildren.add(child("RAG Chatbot", "rag", "link", "chat"));
+            aiChildren.add(child("Demotivation", "demotivation", "link", "mood"));
+            menu.add(sub("AI", "ai", "smart_toy", aiChildren));
+        }
         menu.add(link("Profile", "profile", "person"));
 
         return ResponseEntity.ok(menu);
@@ -240,11 +252,22 @@ public class AuthController {
         return item;
     }
 
+    // ─── Version SANS icône (pour les autres menus) ───
     private Map<String, Object> child(String name, String route, String type) {
         Map<String, Object> item = new HashMap<>();
         item.put("route", route);
         item.put("name",  name);
         item.put("type",  type);
+        return item;
+    }
+
+    // ─── Version AVEC icône (pour AI) ───
+    private Map<String, Object> child(String name, String route, String type, String icon) {
+        Map<String, Object> item = new HashMap<>();
+        item.put("route", route);
+        item.put("name",  name);
+        item.put("type",  type);
+        item.put("icon",  icon);
         return item;
     }
 

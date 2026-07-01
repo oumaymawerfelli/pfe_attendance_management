@@ -1,0 +1,452 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              name="autorisation_sortie" pageWidth="595" pageHeight="842"
+              columnWidth="535" leftMargin="30" rightMargin="30"
+              topMargin="25" bottomMargin="20"
+              uuid="33333333-3333-3333-3333-333333333001">
+
+    <!-- ═══ Identity ═══ -->
+    <parameter name="FIRST_NAME"     class="java.lang.String"/>
+    <parameter name="LAST_NAME"      class="java.lang.String"/>
+    <parameter name="PHONE"          class="java.lang.String"/>
+    <parameter name="ADDRESS"        class="java.lang.String"/>
+
+    <!-- ═══ Exit details ═══ -->
+    <parameter name="EXIT_DATE"      class="java.lang.String"/>   <!-- dd / MM / yyyy -->
+    <parameter name="EXIT_TIME"      class="java.lang.String"/>   <!-- HH:mm -->
+    <parameter name="RETURN_TIME"    class="java.lang.String"/>   <!-- HH:mm -->
+    <parameter name="DURATION"       class="java.lang.String"/>   <!-- e.g. "1h 15min" -->
+    <parameter name="MOTIF"          class="java.lang.String"/>
+    <parameter name="MONTHLY_COUNT"  class="java.lang.String"/>   <!-- Nbre -->
+
+    <!-- ═══ Images ═══ -->
+    <parameter name="COMPANY_LOGO"   class="java.io.InputStream"/>
+    <parameter name="CERT_LOGO"      class="java.io.InputStream"/>
+    <parameter name="DG_SIGNATURE"   class="java.io.InputStream"/>
+
+    <!-- ──────────────────────────────────────────────────────── -->
+    <!-- TITLE BAND — 3-column header (logo / title / cert)       -->
+    <!-- ──────────────────────────────────────────────────────── -->
+    <title>
+        <band height="75">
+
+            <!-- Logo ArabSoft (left box) -->
+            <frame>
+                <reportElement x="0" y="0" width="130" height="70"
+                               uuid="33333333-3333-3333-3333-333333333100"/>
+                <box>
+                    <topPen    lineWidth="1.0" lineColor="#4F81BD"/>
+                    <leftPen   lineWidth="1.0" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="1.0" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="1.0" lineColor="#4F81BD"/>
+                </box>
+                <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle">
+                    <reportElement x="10" y="10" width="110" height="50"
+                                   uuid="33333333-3333-3333-3333-333333333101"/>
+                    <imageExpression><![CDATA[$P{COMPANY_LOGO}]]></imageExpression>
+                </image>
+            </frame>
+
+            <!-- Title centered -->
+            <frame>
+                <reportElement x="135" y="0" width="265" height="70"
+                               uuid="33333333-3333-3333-3333-333333333102"/>
+                <box>
+                    <topPen    lineWidth="1.0" lineColor="#4F81BD"/>
+                    <leftPen   lineWidth="1.0" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="1.0" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="1.0" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="0" y="0" width="265" height="70"
+                                   uuid="33333333-3333-3333-3333-333333333103"/>
+                    <textElement textAlignment="Center" verticalAlignment="Middle">
+                        <font size="18" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Autorisation de Sortie]]></text>
+                </staticText>
+            </frame>
+
+            <!-- Certification logo (right box) -->
+            <frame>
+                <reportElement x="405" y="0" width="130" height="70"
+                               uuid="33333333-3333-3333-3333-333333333104"/>
+                <box>
+                    <topPen    lineWidth="1.0" lineColor="#4F81BD"/>
+                    <leftPen   lineWidth="1.0" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="1.0" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="1.0" lineColor="#4F81BD"/>
+                </box>
+                <image scaleImage="RetainShape" hAlign="Center" vAlign="Middle">
+                    <reportElement x="10" y="10" width="110" height="50"
+                                   uuid="33333333-3333-3333-3333-333333333105"/>
+                    <imageExpression><![CDATA[$P{CERT_LOGO}]]></imageExpression>
+                </image>
+            </frame>
+
+        </band>
+    </title>
+
+    <!-- ──────────────────────────────────────────────────────── -->
+    <!-- DETAIL BAND                                              -->
+    <!-- ──────────────────────────────────────────────────────── -->
+    <detail>
+        <band height="650">
+
+            <!-- ═════════════ Identity rows ═════════════ -->
+
+            <!-- Row: Date | Nbre -->
+            <frame>
+                <reportElement x="0" y="5" width="535" height="30"
+                               uuid="33333333-3333-3333-3333-333333333200"/>
+                <box>
+                    <topPen    lineWidth="0.75" lineColor="#4F81BD"/>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="6" y="0" width="60" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333201"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Date :]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="70" y="0" width="180" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333202"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{EXIT_DATE}]]></textFieldExpression>
+                </textField>
+                <staticText>
+                    <reportElement x="270" y="0" width="60" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333203"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Nbre :]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="335" y="0" width="190" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333204"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{MONTHLY_COUNT}]]></textFieldExpression>
+                </textField>
+            </frame>
+
+            <!-- Row: Nom & Prénom (full width) -->
+            <frame>
+                <reportElement x="0" y="35" width="535" height="30"
+                               uuid="33333333-3333-3333-3333-333333333210"/>
+                <box>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="6" y="0" width="100" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333211"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Nom & Prénom :]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="110" y="0" width="420" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333212"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{FIRST_NAME} + " " + $P{LAST_NAME}]]></textFieldExpression>
+                </textField>
+            </frame>
+
+            <!-- Row: Heure de Sortie | Heure de Reprise -->
+            <frame>
+                <reportElement x="0" y="65" width="535" height="30"
+                               uuid="33333333-3333-3333-3333-333333333220"/>
+                <box>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="6" y="0" width="100" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333221"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Heure de Sortie :]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="110" y="0" width="160" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333222"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{EXIT_TIME}]]></textFieldExpression>
+                </textField>
+                <staticText>
+                    <reportElement x="280" y="0" width="110" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333223"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Heure de Reprise :]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="395" y="0" width="135" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333224"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{RETURN_TIME}]]></textFieldExpression>
+                </textField>
+            </frame>
+
+            <!-- Row: Durée (full width + hint) -->
+            <frame>
+                <reportElement x="0" y="95" width="535" height="30"
+                               uuid="33333333-3333-3333-3333-333333333230"/>
+                <box>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="6" y="0" width="60" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333231"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Durée :]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="70" y="0" width="200" height="30"
+                                   uuid="33333333-3333-3333-3333-333333333232"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{DURATION}]]></textFieldExpression>
+                </textField>
+                <staticText>
+                    <reportElement x="275" y="0" width="255" height="30"
+                                   forecolor="#888888"
+                                   uuid="33333333-3333-3333-3333-333333333233"/>
+                    <textElement verticalAlignment="Middle" textAlignment="Right">
+                        <font size="8" isItalic="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Max : (1h 30 Minutes – Hors Pause)]]></text>
+                </staticText>
+            </frame>
+
+            <!-- Row: Motif d'Autorisation (3 lines tall) -->
+            <frame>
+                <reportElement x="0" y="125" width="535" height="60"
+                               uuid="33333333-3333-3333-3333-333333333240"/>
+                <box>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="6" y="4" width="130" height="14"
+                                   uuid="33333333-3333-3333-3333-333333333241"/>
+                    <textElement>
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Motif d'Autorisation :]]></text>
+                </staticText>
+                <textField isStretchWithOverflow="true">
+                    <reportElement x="140" y="4" width="390" height="52"
+                                   uuid="33333333-3333-3333-3333-333333333242"/>
+                    <textElement>
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{MOTIF}]]></textFieldExpression>
+                </textField>
+            </frame>
+
+            <!-- Row: Téléphone (full width) -->
+            <frame>
+                <reportElement x="0" y="185" width="535" height="28"
+                               uuid="33333333-3333-3333-3333-333333333250"/>
+                <box>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="6" y="0" width="80" height="28"
+                                   uuid="33333333-3333-3333-3333-333333333251"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Téléphone :]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="90" y="0" width="440" height="28"
+                                   uuid="33333333-3333-3333-3333-333333333252"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{PHONE}]]></textFieldExpression>
+                </textField>
+            </frame>
+
+            <!-- Row: Adresse Actuelle Précise -->
+            <frame>
+                <reportElement x="0" y="213" width="535" height="28"
+                               uuid="33333333-3333-3333-3333-333333333260"/>
+                <box>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="6" y="0" width="150" height="28"
+                                   uuid="33333333-3333-3333-3333-333333333261"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Adresse Actuelle Précise :]]></text>
+                </staticText>
+                <textField>
+                    <reportElement x="160" y="0" width="370" height="28"
+                                   uuid="33333333-3333-3333-3333-333333333262"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="9" fontName="SansSerif"/>
+                    </textElement>
+                    <textFieldExpression><![CDATA[$P{ADDRESS}]]></textFieldExpression>
+                </textField>
+            </frame>
+
+            <!-- ═════════════ NB section ═════════════ -->
+
+            <frame>
+                <reportElement x="0" y="255" width="535" height="20"
+                               mode="Opaque" backcolor="#EAF1F8"
+                               uuid="33333333-3333-3333-3333-333333333300"/>
+                <box>
+                    <topPen    lineWidth="0.75" lineColor="#4F81BD"/>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="6" y="0" width="100" height="20"
+                                   uuid="33333333-3333-3333-3333-333333333301"/>
+                    <textElement verticalAlignment="Middle">
+                        <font size="10" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[NB :]]></text>
+                </staticText>
+            </frame>
+
+            <frame>
+                <reportElement x="0" y="275" width="535" height="70"
+                               uuid="33333333-3333-3333-3333-333333333310"/>
+                <box>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="8" y="3" width="520" height="64"
+                                   uuid="33333333-3333-3333-3333-333333333311"/>
+                    <textElement>
+                        <font size="7" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[- Prière remplir soigneusement et clairement la date, l'heure de demande de l'autorisation, la durée et le motif.
+- La durée de l'autorisation ne doit pas dépasser une heure et demi (1 heure 30mn).
+- Nombre des Autorisations par Mois :
+       > 2 donne absence à 0.5 jours
+       > 3 donne absence à 1 jour]]></text>
+                </staticText>
+            </frame>
+
+            <!-- ═════════════ Signatures — 3 columns ═════════════ -->
+
+            <!-- Header row -->
+            <frame>
+                <reportElement x="0" y="360" width="535" height="22"
+                               mode="Opaque" backcolor="#EAF1F8"
+                               uuid="33333333-3333-3333-3333-333333333400"/>
+                <box>
+                    <topPen    lineWidth="0.75" lineColor="#4F81BD"/>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <staticText>
+                    <reportElement x="0" y="0" width="178" height="22"
+                                   uuid="33333333-3333-3333-3333-333333333401"/>
+                    <textElement textAlignment="Center" verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Signature de l'intéressée]]></text>
+                </staticText>
+                <line>
+                    <reportElement x="178" y="0" width="1" height="22"
+                                   forecolor="#4F81BD"
+                                   uuid="33333333-3333-3333-3333-333333333402"/>
+                </line>
+                <staticText>
+                    <reportElement x="179" y="0" width="178" height="22"
+                                   uuid="33333333-3333-3333-3333-333333333403"/>
+                    <textElement textAlignment="Center" verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Validation du chef de Projet]]></text>
+                </staticText>
+                <line>
+                    <reportElement x="357" y="0" width="1" height="22"
+                                   forecolor="#4F81BD"
+                                   uuid="33333333-3333-3333-3333-333333333404"/>
+                </line>
+                <staticText>
+                    <reportElement x="358" y="0" width="177" height="22"
+                                   uuid="33333333-3333-3333-3333-333333333405"/>
+                    <textElement textAlignment="Center" verticalAlignment="Middle">
+                        <font size="9" isBold="true" fontName="SansSerif"/>
+                    </textElement>
+                    <text><![CDATA[Signature du Directeur Général]]></text>
+                </staticText>
+            </frame>
+
+            <!-- Body row with signature image -->
+            <frame>
+                <reportElement x="0" y="382" width="535" height="100"
+                               uuid="33333333-3333-3333-3333-333333333410"/>
+                <box>
+                    <leftPen   lineWidth="0.75" lineColor="#4F81BD"/>
+                    <bottomPen lineWidth="0.75" lineColor="#4F81BD"/>
+                    <rightPen  lineWidth="0.75" lineColor="#4F81BD"/>
+                </box>
+                <line>
+                    <reportElement x="178" y="0" width="1" height="100"
+                                   forecolor="#4F81BD"
+                                   uuid="33333333-3333-3333-3333-333333333411"/>
+                </line>
+                <line>
+                    <reportElement x="357" y="0" width="1" height="100"
+                                   forecolor="#4F81BD"
+                                   uuid="33333333-3333-3333-3333-333333333412"/>
+                </line>
+                <!-- DG signature in 3rd column -->
+                <image scaleImage="RetainShape">
+                    <reportElement x="370" y="15" width="155" height="70"
+                                   mode="Transparent"
+                                   uuid="33333333-3333-3333-3333-333333333413"/>
+                    <imageExpression><![CDATA[$P{DG_SIGNATURE}]]></imageExpression>
+                </image>
+            </frame>
+
+        </band>
+    </detail>
+</jasperReport>

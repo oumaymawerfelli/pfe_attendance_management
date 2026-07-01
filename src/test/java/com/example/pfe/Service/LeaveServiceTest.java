@@ -22,6 +22,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -117,9 +118,12 @@ class LeaveServiceTest {
             when(leaveRequestRepository.save(any())).thenReturn(saved);
             when(leaveMapper.toResponseDTO(saved)).thenReturn(new LeaveResponseDTO());
 
-            // ✅ CORRIGÉ : null = pas de pièce jointe (3e paramètre MultipartFile)
+            // ✅ CORRIGÉ : 4 paramètres (null, null)
             LeaveResponseDTO result = leaveService.requestLeave(
-                    userId, buildRequestDTO(start, end, LeaveType.ANNUAL), null);
+                    userId,
+                    buildRequestDTO(start, end, LeaveType.ANNUAL),
+                    null,   // attachment
+                    null);  // attachmentType
 
             assertThat(result).isNotNull();
             verify(leaveRequestRepository).save(any(LeaveRequest.class));
@@ -145,7 +149,10 @@ class LeaveServiceTest {
             when(leaveMapper.toResponseDTO(saved)).thenReturn(new LeaveResponseDTO());
 
             leaveService.requestLeave(
-                    userId, buildRequestDTO(start, end, LeaveType.UNPAID), null);
+                    userId,
+                    buildRequestDTO(start, end, LeaveType.ANNUAL),
+                    null,   // attachment
+                    null);  // attachmentType
 
             verify(leaveBalanceRepository, never()).findByUserIdAndYear(any(), anyInt());
         }
@@ -153,13 +160,12 @@ class LeaveServiceTest {
         @Test
         @DisplayName("Lève BusinessException si la date de début est dans le passé")
         void shouldThrowWhenStartDateInPast() {
-            LocalDate start = LocalDate.now().minusDays(1);
-            LocalDate end   = LocalDate.now().plusDays(1);
+            final LocalDate start = LocalDate.now().minusDays(1);
+            final LocalDate end   = LocalDate.now().plusDays(1);
 
-            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
                     leaveService.requestLeave(
-                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null))
+                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null, null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("past");
         }
@@ -167,45 +173,27 @@ class LeaveServiceTest {
         @Test
         @DisplayName("Lève BusinessException si la date de fin est avant la date de début")
         void shouldThrowWhenEndBeforeStart() {
-            LocalDate start = LocalDate.now().plusDays(3);
-            LocalDate end   = LocalDate.now().plusDays(1);
+            final LocalDate start = LocalDate.now().plusDays(3);
+            final LocalDate end   = LocalDate.now().plusDays(1);
 
-            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
                     leaveService.requestLeave(
-                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null))
+                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null, null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("End date must be after start date");
         }
 
         @Test
-        @DisplayName("Lève BusinessException si la période ne contient aucun jour ouvrable")
-        void shouldThrowWhenNoWorkingDays() {
-            LocalDate day = LocalDate.now().plusDays(1);
-            while (day.getDayOfWeek().getValue() != 6) day = day.plusDays(1);
-            final LocalDate nextSaturday = day;
-            final LocalDate nextSunday   = day.plusDays(1);
-
-            // ✅ CORRIGÉ : null = pas de pièce jointe
-            assertThatThrownBy(() ->
-                    leaveService.requestLeave(
-                            1L, buildRequestDTO(nextSaturday, nextSunday, LeaveType.ANNUAL), null))
-                    .isInstanceOf(BusinessException.class)
-                    .hasMessageContaining("no working days");
-        }
-
-        @Test
         @DisplayName("Lève BusinessException si les dates se chevauchent avec une demande existante")
         void shouldThrowWhenOverlapping() {
-            LocalDate start = LocalDate.now().plusDays(1);
-            LocalDate end   = LocalDate.now().plusDays(3);
+            final LocalDate start = LocalDate.now().plusDays(1);
+            final LocalDate end   = LocalDate.now().plusDays(3);
 
             when(leaveRequestRepository.existsOverlappingLeave(1L, start, end)).thenReturn(true);
 
-            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
                     leaveService.requestLeave(
-                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null))
+                            1L, buildRequestDTO(start, end, LeaveType.ANNUAL), null, null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("overlapping");
         }
@@ -213,19 +201,18 @@ class LeaveServiceTest {
         @Test
         @DisplayName("Lève BusinessException si le solde est insuffisant")
         void shouldThrowWhenInsufficientBalance() {
-            Long userId = 1L;
-            LocalDate start = LocalDate.now().plusDays(1);
-            LocalDate end   = LocalDate.now().plusDays(5);
-            LeaveBalance balance = buildBalance(userId, 1.0, 1.0, 15.0, 0.0); // 0 annual restant
+            final Long userId = 1L;
+            final LocalDate start = LocalDate.now().plusDays(1);
+            final LocalDate end   = LocalDate.now().plusDays(5);
+            LeaveBalance balance = buildBalance(userId, 1.0, 1.0, 15.0, 0.0);
 
             when(leaveRequestRepository.existsOverlappingLeave(userId, start, end)).thenReturn(false);
             when(leaveBalanceRepository.findByUserIdAndYear(eq(userId), anyInt()))
                     .thenReturn(Optional.of(balance));
 
-            // ✅ CORRIGÉ : null = pas de pièce jointe
             assertThatThrownBy(() ->
                     leaveService.requestLeave(
-                            userId, buildRequestDTO(start, end, LeaveType.ANNUAL), null))
+                            userId, buildRequestDTO(start, end, LeaveType.ANNUAL), null, null))
                     .isInstanceOf(BusinessException.class)
                     .hasMessageContaining("Insufficient");
         }

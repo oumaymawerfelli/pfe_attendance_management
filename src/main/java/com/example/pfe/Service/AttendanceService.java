@@ -123,22 +123,20 @@ public class AttendanceService {
 
         User user = getUserById(userId);
 
-        // Account start date = MAX(hireDate, first attendance record).
-        // - New hires (post-integration): hireDate is the right cutoff.
-        // - Legacy users (hired before app integration): first attendance is the cutoff.
-        // - Fallback: createdAt → null (no clamp).
-        LocalDate hireDate        = user.getHireDate();
+        // Account start = the day the user could actually log in and check in.
+// Before createdAt, the account didn't exist — counting absences then is wrong.
+// hireDate is HR info, not access info: an employee hired in 2020 with an account
+// created in 2026 cannot have been "absent" between 2020 and 2026.
+        LocalDate createdAt       = (user.getCreatedAt() != null) ? user.getCreatedAt().toLocalDate() : null;
         LocalDate firstAttendance = attendanceRepository.findFirstAttendanceDate(userId).orElse(null);
 
         LocalDate accountStartDate;
-        if (hireDate != null && firstAttendance != null) {
-            accountStartDate = hireDate.isAfter(firstAttendance) ? hireDate : firstAttendance;
+        if (createdAt != null) {
+            accountStartDate = createdAt;          // primary: account creation date
         } else if (firstAttendance != null) {
-            accountStartDate = firstAttendance;
-        } else if (hireDate != null) {
-            accountStartDate = hireDate;
+            accountStartDate = firstAttendance;    // fallback for legacy accounts with no createdAt
         } else {
-            accountStartDate = (user.getCreatedAt() != null) ? user.getCreatedAt().toLocalDate() : null;
+            accountStartDate = user.getHireDate(); // last resort
         }
 
         Set<LocalDate> leaveDaySet   = buildLeaveDaySet(userId, month, year, accountStartDate);

@@ -612,5 +612,11 @@ public class UserService {
                 .map(userMapper::toResponseDTO);
     }
 
+    public boolean isOwner(Long userId, String email) {
+        return userRepository.findByEmail(email)
+                .map(u -> u.getId().equals(userId))
+                .orElse(false);
+    }
+
 
 }

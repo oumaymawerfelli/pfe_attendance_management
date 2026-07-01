@@ -15,15 +15,13 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // Résout en chemin absolu, indépendant du working directory
-        // uploadDir = "uploads/avatars" → absolute = "/app/uploads/avatars"
-        // On veut servir le parent (/app/uploads) sous l'URL /uploads/**
-        String absolutePath = Paths.get(uploadDir).toAbsolutePath().getParent().toString();
+        String absolutePath = Paths.get(uploadDir).toAbsolutePath().toString();
 
-        registry.addResourceHandler("/uploads/**")
+        // URL: /uploads/avatars/** → disk: <absolutePath>/
+        // uploadDir = "uploads/avatars" → absolutePath = "/your/app/uploads/avatars"
+        registry.addResourceHandler("/uploads/avatars/**")
                 .addResourceLocations("file:" + absolutePath + "/");
 
-        // Log pour debug — tu verras au démarrage où Spring cherche les fichiers
-        System.out.println("📁 Static resources: /uploads/** → file:" + absolutePath + "/");
+        System.out.println("📁 Static resources: /uploads/avatars/** → file:" + absolutePath + "/");
     }
 }

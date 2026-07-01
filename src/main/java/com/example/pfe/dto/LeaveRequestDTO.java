@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 @Data
 public class LeaveRequestDTO {
@@ -31,4 +32,11 @@ public class LeaveRequestDTO {
 
     @Size(min = 10, max = 200, message = "Reason must be between 10 and 200 characters")
     private String reason;
+
+    // ─── Exit Authorization fields (only used when leaveType == EXIT_AUTHORIZATION) ───
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm")
+    private LocalTime exitTime;
+
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm")
+    private LocalTime returnTime;
 }

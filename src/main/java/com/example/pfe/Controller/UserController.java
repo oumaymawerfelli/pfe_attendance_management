@@ -44,13 +44,13 @@ public class UserController {
 
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER') or @userService.isOwner(#id, authentication.name)")
     public ResponseEntity<UserResponseDTO> updateUser(
             @PathVariable Long id,
             @Valid @RequestBody UserRequestDTO request) {
         UserResponseDTO response = userService.updateUser(id, request);
         return ResponseEntity.ok(response);
     }
-
     /*@PostMapping("/fix-status")
     @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER')")
     public ResponseEntity<String> fixAllUserStatus() {
@@ -72,7 +72,7 @@ public class UserController {
 
 
     @GetMapping("/stats")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER') or hasRole('HR_MANAGER')")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER') ")
     public ResponseEntity<UserStatsDTO> getUserStats() {
         UserStatsDTO stats = userService.getUserStats();
         return ResponseEntity.ok(stats);
@@ -129,12 +129,12 @@ public class UserController {
     }
 
     @PostMapping(value = "/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER')  or #id == authentication.principal.id")
     public ResponseEntity<Map<String, String>> uploadUserPhoto(
             @PathVariable Long id,
             @RequestParam("photo") MultipartFile photo) {
 
         String avatarUrl = userService.uploadUserPhoto(id, photo);
-
         return ResponseEntity.ok(Map.of(
                 "avatarUrl", avatarUrl,
                 "message", "Photo uploaded successfully"

@@ -23,5 +23,5 @@ public class ProjectRequestDTO {
 
     private Long projectManagerId; // ID du manager, pas l'objet entier
 
-    // PAS de champ "code" ici - il est généré automatiquement
+
 }

@@ -22,23 +22,24 @@ public class ProjectController {
 
     private final ProjectService projectService;
 
+    // ── CREATE: General Manager ONLY ─────────────────────────────────────────
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER')")
+    @PreAuthorize("hasRole('GENERAL_MANAGER')")
     public ResponseEntity<ProjectResponseDTO> createProject(
             @Valid @RequestBody ProjectRequestDTO requestDTO) {
         return ResponseEntity.ok(projectService.createProject(requestDTO));
     }
 
+    // ── READ: any authenticated user ─────────────────────────────────────────
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ProjectResponseDTO> getProject(@PathVariable Long id) {
         return ResponseEntity.ok(projectService.getProjectById(id));
     }
 
-    /* Legacy endpoints using employeeCode have been removed.
-     * Assignment is now done via dedicated services using employee email. */
+    // ── UPDATE STATUS: GM or PM of this project ──────────────────────────────
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER') or @securityService.isProjectManager(#id)")
+    @PreAuthorize("hasRole('GENERAL_MANAGER') or @securityService.isProjectManager(#id)")
     public ResponseEntity<ProjectResponseDTO> updateStatus(
             @PathVariable Long id,
             @Valid @RequestBody StatusUpdateRequestDTO request) {
@@ -51,20 +52,23 @@ public class ProjectController {
         return ResponseEntity.ok(projectService.getStatusHistory(id));
     }
 
+    // ── UPDATE PROJECT: GM or PM of this project ─────────────────────────────
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER')")
+    @PreAuthorize("hasRole('GENERAL_MANAGER') or @securityService.isProjectManager(#id)")
     public ResponseEntity<ProjectResponseDTO> updateProject(
             @PathVariable Long id,
             @Valid @RequestBody ProjectRequestDTO requestDTO) {
         return ResponseEntity.ok(projectService.updateProject(id, requestDTO));
     }
 
+    // ── DELETE: General Manager ONLY ─────────────────────────────────────────
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('GENERAL_MANAGER')")
+    @PreAuthorize("hasRole('GENERAL_MANAGER')")
     public ResponseEntity<Void> deleteProject(@PathVariable Long id) {
         projectService.deleteProject(id);
         return ResponseEntity.noContent().build();
     }
+
     @GetMapping
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<Page<ProjectResponseDTO>> getAllProjects(

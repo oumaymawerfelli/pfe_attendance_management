@@ -98,7 +98,8 @@ public class LeaveDocument {
         ACCEPTATION_LETTER,     // generated when leave is APPROVED
         JUSTIFICATION,          // auto-generated justification letter
         MEDICAL_CERTIFICATE,    // uploaded by employee
-        PROOF,                  // other supporting document (uploaded)
+        PROOF,
+        EXIT_AUTHORIZATION_LETTER, // other supporting document (uploaded)
         OTHER
     }
 

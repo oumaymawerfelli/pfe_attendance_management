@@ -320,14 +320,11 @@ public class AuthenticationService {
     // ==================== PRIVATE HELPER METHODS ====================
 
     private User validateCredentials(LoginRequestDTO request) {
-
-        // Find user by email (case insensitive)
         User user = userRepository.findByEmailIgnoreCase(request.getEmail())
-                .orElseThrow(() -> new BusinessException("Invalid credentials"));
+                .orElseThrow(() -> new BusinessException("Incorrect email or password."));
 
-        // Check if password matches the encrypted one in database
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new BusinessException("Invalid credentials");
+            throw new BusinessException("Incorrect email or password.");
         }
 
         return user;
@@ -335,16 +332,30 @@ public class AuthenticationService {
 
     private void checkAccountStatus(User user) {
 
-        // Check if account is activated (user clicked email link)
-        if (!user.isEnabled()) {
-            throw new BusinessException("Account not activated. Please check your email.");
+        // Account waiting for admin approval
+        if (Boolean.TRUE.equals(user.isRegistrationPending())) {
+            throw new BusinessException(
+                    "Your account is pending approval by an administrator.");
         }
-        // Check if this is first login (forces password change)
+
+        // Account not yet activated (email not confirmed)
+        if (!user.isEnabled()) {
+            throw new BusinessException(
+                    "Your account is not activated yet. Please check your email inbox.");
+        }
+
+        // Account disabled by admin
+        if (!Boolean.TRUE.equals(user.getActive())) {
+            throw new BusinessException(
+                    "Your account has been disabled. Please contact the administrator.");
+        }
+
+        // First login → force password change
         if (user.isFirstLogin()) {
-            throw new BusinessException("Password change required on first login");
+            throw new BusinessException(
+                    "Password change required on first login.");
         }
     }
-
 
     private User getValidUserFromActivationToken(String token) {
         // STEP 1: Check if token itself is valid (signature, expiration, type)

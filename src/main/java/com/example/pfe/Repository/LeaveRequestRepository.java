@@ -2,6 +2,7 @@ package com.example.pfe.Repository;
 
 import com.example.pfe.entities.LeaveRequest;
 import com.example.pfe.enums.LeaveStatus;
+import com.example.pfe.enums.LeaveType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -77,4 +78,19 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     List<LeaveRequest> findApprovedOnDate(
             @Param("date")    LocalDate date,
             @Param("userIds") Set<Long> userIds);
+
+    @Query("""
+    SELECT COUNT(lr) FROM LeaveRequest lr
+    WHERE lr.user.id = :userId
+      AND lr.leaveType = :type
+      AND YEAR(lr.startDate) = :year
+      AND MONTH(lr.startDate) = :month
+      AND lr.status = com.example.pfe.enums.LeaveStatus.APPROVED
+""")
+    int countExitAuthorizationsInMonth(
+            @Param("userId") Long userId,
+            @Param("type") LeaveType type,
+            @Param("year") int year,
+            @Param("month") int month);
 }
+

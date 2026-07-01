@@ -20,6 +20,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.pfe.entities.Role;
+import com.example.pfe.enums.RoleName;
+import com.example.pfe.Repository.RoleRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,6 +41,7 @@ public class ProjectServiceImpl implements ProjectService {
     private final ProjectMapper projectMapper;
     private final NotificationService notificationService;
     private final ProjectStatusHistoryRepository historyRepository;
+    private final RoleRepository roleRepository;
 
     // ==================== CRUD OPERATIONS ====================
 
@@ -67,6 +71,10 @@ public class ProjectServiceImpl implements ProjectService {
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Project manager not found: " + requestDTO.getProjectManagerId()));
             project.setProjectManager(projectManager);
+            project.setAssignmentDate(LocalDateTime.now());
+
+            // 🆕 PROMOTE TO PM
+            promoteToProjectManager(projectManager);
         }
 
         Project savedProject = projectRepository.save(project);
@@ -82,8 +90,7 @@ public class ProjectServiceImpl implements ProjectService {
         log.info("Updating project ID: {}.....", id);
 
         Project project = projectRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Project not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + id));
 
         if (requestDTO.getEndDate() != null &&
                 requestDTO.getStartDate() != null &&
@@ -98,17 +105,33 @@ public class ProjectServiceImpl implements ProjectService {
         project.setEndDate(requestDTO.getEndDate());
         project.setUpdatedAt(LocalDateTime.now());
 
+        // 🆕 Track the old PM to potentially demote them
+        User oldPm = project.getProjectManager();
+
         if (requestDTO.getProjectManagerId() != null &&
                 (project.getProjectManager() == null ||
                         !project.getProjectManager().getId().equals(requestDTO.getProjectManagerId()))) {
-            User projectManager = userRepository.findById(requestDTO.getProjectManagerId())
+            User newPm = userRepository.findById(requestDTO.getProjectManagerId())
                     .orElseThrow(() -> new ResourceNotFoundException(
                             "Project manager not found: " + requestDTO.getProjectManagerId()));
-            project.setProjectManager(projectManager);
+            project.setProjectManager(newPm);
             project.setAssignmentDate(LocalDateTime.now());
+
+            // 🆕 PROMOTE new PM
+            promoteToProjectManager(newPm);
+
+            // 🆕 DEMOTE old PM if no longer managing any project
+            if (oldPm != null && !oldPm.getId().equals(newPm.getId())) {
+                demoteFromProjectManagerIfNoProjects(oldPm, project.getId());
+            }
         } else if (requestDTO.getProjectManagerId() == null && project.getProjectManager() != null) {
             project.setProjectManager(null);
             project.setAssignmentDate(null);
+
+            // 🆕 DEMOTE old PM
+            if (oldPm != null) {
+                demoteFromProjectManagerIfNoProjects(oldPm, project.getId());
+            }
         }
 
         Project updatedProject = projectRepository.save(project);
@@ -124,7 +147,6 @@ public class ProjectServiceImpl implements ProjectService {
 
         return mapToProjectResponseDTO(updatedProject);
     }
-
     // ==================== READ OPERATIONS ====================
 
     @Override
@@ -164,16 +186,23 @@ public class ProjectServiceImpl implements ProjectService {
         log.info("Deleting project ID: {}", id);
 
         Project project = projectRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Project not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + id));
 
         List<TeamAssignment> teamAssignments = teamAssignmentRepository.findByProjectId(id);
         if (!teamAssignments.isEmpty()) {
             throw new BusinessException("Cannot delete project with assigned team members");
         }
 
+        // 🆕 Capture PM before deletion
+        User pm = project.getProjectManager();
+
         projectRepository.delete(project);
         log.info("Project deleted: {} (ID: {})", project.getCode(), id);
+
+        // 🆕 DEMOTE if PM has no more projects
+        if (pm != null) {
+            demoteFromProjectManagerIfNoProjects(pm, id);
+        }
     }
 
     // ==================== STATUS MANAGEMENT ====================
@@ -432,5 +461,50 @@ public class ProjectServiceImpl implements ProjectService {
         target.setUpdatedAt(source.getUpdatedAt());
         target.setProjectManagerName(source.getProjectManagerName());
         target.setProjectManagerEmail(source.getProjectManagerEmail());
+    }
+    // ==================== ROLE MANAGEMENT HELPERS ====================
+
+    /**
+     * Add PROJECT_MANAGER role to a user (keeps existing EMPLOYEE role).
+     * No-op if user already has PROJECT_MANAGER role.
+     */
+    private void promoteToProjectManager(User user) {
+        Role pmRole = roleRepository.findByName(RoleName.PROJECT_MANAGER)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Role PROJECT_MANAGER not found in database"));
+
+        boolean alreadyPm = user.getRoles().stream()
+                .anyMatch(r -> r.getName() == RoleName.PROJECT_MANAGER);
+
+        if (!alreadyPm) {
+            user.getRoles().add(pmRole);
+            userRepository.save(user);
+            log.info("✅ User {} promoted to PROJECT_MANAGER", user.getEmail());
+        } else {
+            log.debug("User {} already has PROJECT_MANAGER role — skipping", user.getEmail());
+        }
+    }
+
+    /**
+     * Remove PROJECT_MANAGER role from a user IF they no longer manage any project.
+     * The 'excludedProjectId' parameter excludes the project being deleted/changed
+     * from the "still PM somewhere" check.
+     */
+    private void demoteFromProjectManagerIfNoProjects(User user, Long excludedProjectId) {
+        // Count active projects where this user is still PM, excluding the current one
+        long remainingProjects = projectRepository.findByProjectManager(user).stream()
+                .filter(p -> !p.getId().equals(excludedProjectId))
+                .count();
+
+        if (remainingProjects == 0) {
+            boolean removed = user.getRoles().removeIf(r -> r.getName() == RoleName.PROJECT_MANAGER);
+            if (removed) {
+                userRepository.save(user);
+                log.info("✅ User {} demoted from PROJECT_MANAGER (no more projects)", user.getEmail());
+            }
+        } else {
+            log.debug("User {} still manages {} other project(s) — keeping PM role",
+                    user.getEmail(), remainingProjects);
+        }
     }
 }

@@ -30,6 +30,7 @@ import java.nio.file.Paths;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
@@ -75,7 +76,7 @@ public class LeaveService {
 
         User user = getUserById(userId);
 
-        LeaveRequest request = LeaveRequest.builder()
+        LeaveRequest.LeaveRequestBuilder builder = LeaveRequest.builder()
                 .user(user)
                 .leaveType(dto.getLeaveType())
                 .startDate(dto.getStartDate())
@@ -83,9 +84,15 @@ public class LeaveService {
                 .daysCount(daysCount)
                 .reason(dto.getReason())
                 .status(LeaveStatus.PENDING)
-                .createdAt(LocalDateTime.now())
-                .build();
+                .createdAt(LocalDateTime.now());
 
+// ─── Exit Authorization specific fields ───
+        if (dto.getLeaveType() == LeaveType.EXIT_AUTHORIZATION) {
+            builder.exitTime(dto.getExitTime());
+            builder.returnTime(dto.getReturnTime());
+        }
+
+        LeaveRequest request = builder.build();
         LeaveRequest saved = leaveRequestRepository.save(request);
         log.info("Leave request created — ID: {}, days: {}", saved.getId(), daysCount);
 
@@ -327,6 +334,7 @@ public class LeaveService {
             case ANNUAL -> "Annual";
             case SICK   -> "Sick";
             case UNPAID -> "Unpaid";
+            case EXIT_AUTHORIZATION -> "Exit Authorization";
         };
     }
 

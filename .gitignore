@@ -37,7 +37,7 @@ build/
 .env.local
 .env.*.local
 *.log
-
+src/main/resources/arabsoft-rag-service.json
 ### Uploads (fichiers générés par l'app) ###
 uploads/
 

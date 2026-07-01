@@ -191,17 +191,16 @@ class LeaveControllerTest {
             LeaveRequestDTO  requestDTO  = buildLeaveRequestDTO();
             LeaveResponseDTO responseDTO = buildLeaveResponseDTO(1L);
 
-            // ✅ CORRIGÉ : signature réelle = (Long userId, LeaveRequestDTO dto, MultipartFile attachment)
-            when(leaveService.requestLeave(eq(USER_ID), any(LeaveRequestDTO.class), any()))
+            // ✅ CORRIGÉ : utilise any() sans type
+            when(leaveService.requestLeave(eq(USER_ID), any(), any(), anyString()))
                     .thenReturn(responseDTO);
 
-            // ✅ CORRIGÉ : multipart() au lieu de post() + JSON
             mockMvc.perform(multipart("/api/leaves/request")
                             .file(leaveRequestPart(requestDTO)))
-                    .andExpect(status().isOk())   // ✅ 200, pas 201
+                    .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(1));
 
-            verify(leaveService).requestLeave(eq(USER_ID), any(LeaveRequestDTO.class), any());
+            verify(leaveService).requestLeave(eq(USER_ID), any(), any(), anyString());
         }
 
         @Test
@@ -213,13 +212,15 @@ class LeaveControllerTest {
                     "attachment", "doc.pdf", MediaType.APPLICATION_PDF_VALUE,
                     "PDF content".getBytes());
 
-            when(leaveService.requestLeave(eq(USER_ID), any(LeaveRequestDTO.class), any(MultipartFile.class)))
+            when(leaveService.requestLeave(eq(USER_ID), any(), any(), anyString()))
                     .thenReturn(buildLeaveResponseDTO(2L));
 
             mockMvc.perform(multipart("/api/leaves/request")
                             .file(leaveRequestPart(requestDTO))
                             .file(attachment))
                     .andExpect(status().isOk());
+
+            verify(leaveService).requestLeave(eq(USER_ID), any(), any(), anyString());
         }
 
         @Test
@@ -241,8 +242,6 @@ class LeaveControllerTest {
                     .andExpect(status().isNotFound());
         }
     }
-
-
     // ══════════════════════════════════════════════════════════════════════════
     // GROUPE 3 — POST /api/leaves/draft
     // ✅ NOUVEAU : endpoint présent dans le contrôleur mais absent des tests.

@@ -91,13 +91,12 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
             @Param("year")   int year);
 
     @Query("""
-        SELECT a FROM Attendance a
-        WHERE a.user.id       = :userId
-          AND MONTH(a.date)   = :month
-          AND YEAR(a.date)    = :year
-          AND a.checkOut      IS NOT NULL
-        ORDER BY a.date ASC
-    """)
+    SELECT a FROM Attendance a
+    WHERE a.user.id       = :userId
+      AND MONTH(a.date)   = :month
+      AND YEAR(a.date)    = :year
+    ORDER BY a.date ASC
+""")
     List<Attendance> findDailyHoursForChart(
             @Param("userId") Long userId,
             @Param("month")  int month,

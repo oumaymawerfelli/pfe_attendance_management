@@ -75,7 +75,13 @@ public class ChatRouterService {
     // ── Language detection helpers ────────────────────────────────────────────
 
     private boolean containsArabic(String text) {
-        return text.chars().anyMatch(c -> Character.UnicodeBlock.of(c) == Character.UnicodeBlock.ARABIC);
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        return text.chars().anyMatch(c ->
+                (c >= 0x0600 && c <= 0x06FF) ||
+                        (c >= 0x0750 && c <= 0x077F)
+        );
     }
 
     private boolean isFrench(String text) {

@@ -7,6 +7,7 @@ import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Entity
 @Table(name = "leave_request")
@@ -65,4 +66,11 @@ public class LeaveRequest {
      */
     @Column(name = "document_path")
     private String documentPath;
+
+    // ─── Exit Authorization fields (used when leaveType == EXIT_AUTHORIZATION) ───
+    @Column(name = "exit_time")
+    private LocalTime exitTime;        // Heure de Sortie
+
+    @Column(name = "return_time")
+    private LocalTime returnTime;      // Heure de Reprise
 }
